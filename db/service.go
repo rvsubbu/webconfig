@@ -427,10 +427,6 @@ func UpdateDocumentState(c DatabaseClient, cpeMac string, m *common.EventMessage
 	var oldState int
 	if subdoc.State() != nil {
 		oldState = *subdoc.State()
-		if oldState == common.Deployed {
-			log.WithFields(fields).Warn("state=1 already")
-			return updatedSubdocIds, nil
-		}
 		if oldState < common.Deployed || oldState > common.Failure {
 			err := common.Http404Error{
 				Message: fmt.Sprintf("invalid state(%v) in db", oldState),
