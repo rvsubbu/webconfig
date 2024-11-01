@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package common
 
 import (
@@ -31,7 +31,8 @@ const (
 )
 
 var (
-	ErrNotOK = fmt.Errorf("!ok")
+	ErrNotOK              = fmt.Errorf("!ok")
+	ErrRootDocumentLocked = fmt.Errorf("root document is locked")
 )
 
 type Http400Error struct {
