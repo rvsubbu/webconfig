@@ -89,9 +89,12 @@ func (s *WebconfigServer) MultipartConfigHandler(w http.ResponseWriter, r *http.
 
 	status, respHeader, respBytes, err := BuildWebconfigResponse(s, r.Header, common.RouteHttp, fields)
 
-	// REMINDER 404 use standard response
-	if status == http.StatusNotFound {
-		Error(w, http.StatusNotFound, nil)
+	switch status {
+	case http.StatusNotFound:
+		Error(w, status, nil)
+		return
+	case http.StatusConflict:
+		w.WriteHeader(status)
 		return
 	}
 
@@ -132,6 +135,12 @@ func BuildWebconfigResponse(s *WebconfigServer, rHeader http.Header, route strin
 	if s.KafkaProducerEnabled() && s.StateCorrectionEnabled() && len(messages) > 0 {
 		s.ForwardSuccessKafkaMessages(messages, fields)
 	}
+
+	// root_document locked
+	if errors.Is(err, common.ErrRootDocumentLocked) {
+		return http.StatusConflict, respHeader, nil, common.NewError(err)
+	}
+
 	if uconn == nil {
 		if err != nil {
 			if !s.IsDbNotFound(err) {

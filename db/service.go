@@ -220,6 +220,11 @@ func BuildGetDocument(c DatabaseClient, inHeader http.Header, route string, fiel
 		}
 	}
 
+	// eval if the root_document is locked
+	if cloudRootDocument.Locked() {
+		return nil, cloudRootDocument, deviceRootDocument, deviceVersionMap, false, messages, common.NewError(common.ErrRootDocumentLocked)
+	}
+
 	switch rootCmpEnum {
 	case common.RootDocumentEquals:
 		// create an empty "document"

@@ -14,12 +14,13 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package common
 
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 )
@@ -96,4 +97,20 @@ func TestRootDocumentEquals(t *testing.T) {
 	rootdoc3 := NewRootDocument(bitmap, firmwareVersion3, modelName, partnerId, schemaVersion, version, "")
 	ok = rootdoc1.Equals(rootdoc3)
 	assert.Assert(t, !ok)
+}
+
+func TestRootDocumentLocked(t *testing.T) {
+	bitmap := 123
+	version := "foo"
+	schemaVersion := "33554433-1.3,33554434-1.3"
+	modelName := "bar"
+	partnerId := "cox"
+	firmwareVersion := "TG4482PC2_4.12p7s3_PROD_sey"
+	rootdoc := NewRootDocument(bitmap, firmwareVersion, modelName, partnerId, schemaVersion, version, "")
+	assert.Assert(t, !rootdoc.Locked())
+	epoch := int(time.Now().UnixMilli())
+	rootdoc.LockedTill = epoch + 1000
+	assert.Assert(t, rootdoc.Locked())
+	time.Sleep(time.Duration(1) * time.Second)
+	assert.Assert(t, !rootdoc.Locked())
 }
