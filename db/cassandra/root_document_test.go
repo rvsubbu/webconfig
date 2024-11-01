@@ -14,11 +14,12 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package cassandra
 
 import (
 	"testing"
+	"time"
 
 	"github.com/rdkcentral/webconfig/common"
 	"github.com/rdkcentral/webconfig/util"
@@ -168,4 +169,31 @@ func TestRootDocumentUpdate(t *testing.T) {
 	tgtRootdoc3, err := tdbclient.GetRootDocument(cpeMac)
 	assert.NilError(t, err)
 	assert.DeepEqual(t, tgtRootdoc3, rootdoc3)
+}
+
+func TestRootDocumentLocked(t *testing.T) {
+	cpeMac := util.GenerateRandomCpeMac()
+
+	bitmap := 123
+	version := "foo"
+	schemaVersion := "33554433-1.3,33554434-1.3"
+	modelName := "bar"
+	partnerId := "cox"
+	firmwareVersion := "TG4482PC2_4.12p7s3_PROD_sey"
+
+	rootdoc := common.NewRootDocument(bitmap, firmwareVersion, modelName, partnerId, schemaVersion, version, "")
+	epoch := int(time.Now().UnixMilli())
+	rootdoc.LockedTill = epoch + 1000
+
+	err := tdbclient.SetRootDocument(cpeMac, rootdoc)
+	assert.NilError(t, err)
+
+	fetched, err := tdbclient.GetRootDocument(cpeMac)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, rootdoc, fetched)
+	assert.Assert(t, fetched.Locked())
+
+	time.Sleep(time.Duration(1) * time.Second)
+
+	assert.Assert(t, !fetched.Locked())
 }
