@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package sqlite
 
 import (
@@ -40,4 +40,12 @@ func TestSqliteClient(t *testing.T) {
 	enabled = false
 	tdbclient.SetStateCorrectionEnabled(enabled)
 	assert.Equal(t, tdbclient.StateCorrectionEnabled(), enabled)
+
+	// lock root_document flag
+	enabled = true
+	tdbclient.SetLockRootDocumentEnabled(enabled)
+	assert.Equal(t, tdbclient.LockRootDocumentEnabled(), enabled)
+	enabled = false
+	tdbclient.SetLockRootDocumentEnabled(enabled)
+	assert.Equal(t, tdbclient.LockRootDocumentEnabled(), enabled)
 }
