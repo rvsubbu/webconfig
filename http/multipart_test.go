@@ -177,7 +177,16 @@ func TestMultipartConfigHandler(t *testing.T) {
 	err = server.SetRootDocument(cpeMac, rootdoc)
 	assert.NilError(t, err)
 
-	// get document again
+	// get document again without the feature flag enabled
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusOK)
+
+	// get document again with the feature flag enabled
+	server.SetLockRootDocumentEnabled(true)
+
 	res = ExecuteRequest(req, router).Result()
 	_, err = io.ReadAll(res.Body)
 	assert.NilError(t, err)

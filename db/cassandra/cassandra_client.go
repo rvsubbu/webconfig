@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package cassandra
 
 import (
@@ -23,12 +23,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-akka/configuration"
+	"github.com/gocql/gocql"
 	"github.com/rdkcentral/webconfig/common"
 	"github.com/rdkcentral/webconfig/db"
 	"github.com/rdkcentral/webconfig/security"
 	"github.com/rdkcentral/webconfig/util"
-	"github.com/go-akka/configuration"
-	"github.com/gocql/gocql"
 )
 
 const (
@@ -48,11 +48,12 @@ type CassandraClient struct {
 	*gocql.ClusterConfig
 	*security.AesCodec
 	*common.AppMetrics
-	concurrentQueries      chan bool
-	localDc                string
-	blockedSubdocIds       []string
-	encryptedSubdocIds     []string
-	stateCorrectionEnabled bool
+	concurrentQueries       chan bool
+	localDc                 string
+	blockedSubdocIds        []string
+	encryptedSubdocIds      []string
+	stateCorrectionEnabled  bool
+	lockRootDocumentEnabled bool
 }
 
 /*
@@ -161,16 +162,18 @@ func NewCassandraClient(conf *configuration.Config, testOnly bool) (*CassandraCl
 	blockedSubdocIds := conf.GetStringList("webconfig.blocked_subdoc_ids")
 	encryptedSubdocIds := conf.GetStringList("webconfig.encrypted_subdoc_ids")
 	stateCorrectionEnabled := conf.GetBoolean("webconfig.state_correction_enabled")
+	lockRootDocumentEnabled := conf.GetBoolean("webconfig.lock_root_document_enabled")
 
 	return &CassandraClient{
-		Session:                session,
-		ClusterConfig:          cluster,
-		AesCodec:               codec,
-		concurrentQueries:      make(chan bool, dbconf.GetInt32("concurrent_queries", 500)),
-		localDc:                localDc,
-		blockedSubdocIds:       blockedSubdocIds,
-		encryptedSubdocIds:     encryptedSubdocIds,
-		stateCorrectionEnabled: stateCorrectionEnabled,
+		Session:                 session,
+		ClusterConfig:           cluster,
+		AesCodec:                codec,
+		concurrentQueries:       make(chan bool, dbconf.GetInt32("concurrent_queries", 500)),
+		localDc:                 localDc,
+		blockedSubdocIds:        blockedSubdocIds,
+		encryptedSubdocIds:      encryptedSubdocIds,
+		stateCorrectionEnabled:  stateCorrectionEnabled,
+		lockRootDocumentEnabled: lockRootDocumentEnabled,
 	}, nil
 }
 
@@ -225,6 +228,14 @@ func (c *CassandraClient) StateCorrectionEnabled() bool {
 
 func (c *CassandraClient) SetStateCorrectionEnabled(enabled bool) {
 	c.stateCorrectionEnabled = enabled
+}
+
+func (c *CassandraClient) LockRootDocumentEnabled() bool {
+	return c.lockRootDocumentEnabled
+}
+
+func (c *CassandraClient) SetLockRootDocumentEnabled(enabled bool) {
+	c.lockRootDocumentEnabled = enabled
 }
 
 // TODO we hardcoded for now but it should be changed to be configurable
