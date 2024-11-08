@@ -645,6 +645,9 @@ func LoadRefSubDocuments(c DatabaseClient, document *common.Document, fields log
 		if refId, ok := GetRefId(payload); ok {
 			refsubdocument, err := c.GetRefSubDocument(refId)
 			if err != nil {
+				if c.IsDbNotFound(err) {
+					continue
+				}
 				return nil, common.NewError(err)
 			}
 			subDocument.SetPayload(refsubdocument.Payload())
