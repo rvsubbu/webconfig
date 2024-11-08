@@ -26,6 +26,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rdkcentral/webconfig/common"
 	"github.com/rdkcentral/webconfig/db/cassandra"
@@ -168,6 +169,37 @@ func TestMultipartConfigHandler(t *testing.T) {
 	assert.NilError(t, err)
 	parameters = response.Parameters
 	assert.Equal(t, len(parameters), 1)
+
+	// test root_document lock
+	rootdoc, err := server.GetRootDocument(cpeMac)
+	assert.NilError(t, err)
+	rootdoc.LockedTill = int(time.Now().UnixMilli()) + 1000
+	err = server.SetRootDocument(cpeMac, rootdoc)
+	assert.NilError(t, err)
+
+	// get document again without the feature flag enabled
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusOK)
+
+	// get document again with the feature flag enabled
+	server.SetLockRootDocumentEnabled(true)
+
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusConflict)
+
+	time.Sleep(time.Duration(1) * time.Second)
+
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusOK)
 }
 
 func TestCpeMiddleware(t *testing.T) {

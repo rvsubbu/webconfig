@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package sqlite
 
 import (
@@ -22,10 +22,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/rdkcentral/webconfig/common"
-	"github.com/rdkcentral/webconfig/db"
 	"github.com/go-akka/configuration"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/rdkcentral/webconfig/common"
+	"github.com/rdkcentral/webconfig/db"
 )
 
 const (
@@ -43,9 +43,10 @@ type SqliteClient struct {
 	db.BaseClient
 	*sql.DB
 	*common.AppMetrics
-	concurrentQueries      chan bool
-	blockedSubdocIds       []string
-	stateCorrectionEnabled bool
+	concurrentQueries       chan bool
+	blockedSubdocIds        []string
+	stateCorrectionEnabled  bool
+	lockRootDocumentEnabled bool
 }
 
 func NewSqliteClient(conf *configuration.Config, testOnly bool) (*SqliteClient, error) {
@@ -60,6 +61,7 @@ func NewSqliteClient(conf *configuration.Config, testOnly bool) (*SqliteClient, 
 	blockedSubdocIds := conf.GetStringList("webconfig.blocked_subdoc_ids")
 
 	stateCorrectionEnabled := conf.GetBoolean("webconfig.state_correction_enabled")
+	lockRootDocumentEnabled := conf.GetBoolean("webconfig.lock_root_document_enabled")
 
 	db, err := sql.Open("sqlite3", dbfile)
 	if err != nil {
@@ -67,10 +69,11 @@ func NewSqliteClient(conf *configuration.Config, testOnly bool) (*SqliteClient, 
 	}
 
 	return &SqliteClient{
-		DB:                     db,
-		concurrentQueries:      make(chan bool, conf.GetInt32("webconfig.database.sqlite.concurrent_queries", defaultDbConcurrentQueries)),
-		blockedSubdocIds:       blockedSubdocIds,
-		stateCorrectionEnabled: stateCorrectionEnabled,
+		DB:                      db,
+		concurrentQueries:       make(chan bool, conf.GetInt32("webconfig.database.sqlite.concurrent_queries", defaultDbConcurrentQueries)),
+		blockedSubdocIds:        blockedSubdocIds,
+		stateCorrectionEnabled:  stateCorrectionEnabled,
+		lockRootDocumentEnabled: lockRootDocumentEnabled,
 	}, nil
 }
 
@@ -146,6 +149,14 @@ func (c *SqliteClient) StateCorrectionEnabled() bool {
 
 func (c *SqliteClient) SetStateCorrectionEnabled(enabled bool) {
 	c.stateCorrectionEnabled = enabled
+}
+
+func (c *SqliteClient) LockRootDocumentEnabled() bool {
+	return c.lockRootDocumentEnabled
+}
+
+func (c *SqliteClient) SetLockRootDocumentEnabled(enabled bool) {
+	c.lockRootDocumentEnabled = enabled
 }
 
 func GetTestSqliteClient(conf *configuration.Config, testOnly bool) (*SqliteClient, error) {

@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package sqlite
 
 import (
@@ -45,8 +45,10 @@ var (
     cpe_mac text PRIMARY KEY,
     bitmap bigint,
     firmware_version text,
+    locked_till timestamp,
     model_name text,
     partner_id text,
+    query_params text,
     route text,
     schema_version,
     version text

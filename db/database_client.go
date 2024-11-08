@@ -14,12 +14,12 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package db
 
 import (
-	"github.com/rdkcentral/webconfig/common"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rdkcentral/webconfig/common"
 )
 
 type DatabaseClient interface {
@@ -68,4 +68,7 @@ type DatabaseClient interface {
 	// enable state correction
 	StateCorrectionEnabled() bool
 	SetStateCorrectionEnabled(bool)
+
+	LockRootDocumentEnabled() bool
+	SetLockRootDocumentEnabled(bool)
 }

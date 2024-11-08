@@ -14,12 +14,13 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package common
 
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 const (
@@ -36,6 +37,7 @@ type RootDocument struct {
 	SchemaVersion   string `json:"schema_version"`
 	Version         string `json:"version"`
 	QueryParams     string `json:"query_params"`
+	LockedTill      int    `json:"locked_till"`
 }
 
 // (bitmap, firmware_version, model_name, partner_id, schema_version, version), nil
@@ -68,6 +70,9 @@ func (d *RootDocument) NonEmptyColumnMap() map[string]interface{} {
 	dict := make(map[string]interface{})
 	if d.Bitmap > 0 {
 		dict["bitmap"] = d.Bitmap
+	}
+	if d.LockedTill > 0 {
+		dict["locked_till"] = int64(d.LockedTill)
 	}
 
 	tempDict := map[string]string{
@@ -169,4 +174,8 @@ func (d *RootDocument) String() string {
 func (d *RootDocument) Clone() *RootDocument {
 	obj := *d
 	return &obj
+}
+
+func (d *RootDocument) Locked() bool {
+	return d.LockedTill > 0 && int(time.Now().UnixMilli()) < d.LockedTill
 }
