@@ -119,9 +119,10 @@ type WebconfigServer struct {
 	webpaPokeSpanTemplate         string
 	kafkaProducerEnabled          bool
 	kafkaProducerTopic            string
+	upstreamProfilesEnabled       bool
 	queryParamsValidationEnabled  bool
-	validSubdocIdMap              map[string]int
 	minTrust                      int
+	validSubdocIdMap              map[string]int
 }
 
 func NewTlsConfig(conf *configuration.Config) (*tls.Config, error) {
@@ -290,13 +291,14 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		}
 	}
 
+	upstreamProfilesEnabled := conf.GetBoolean("webconfig.upstream_profiles_enabled")
 	queryParamsValidationEnabled := conf.GetBoolean("webconfig.query_params_validation_enabled")
+	minTrust := int(conf.GetInt32("webconfig.min_trust"))
 	validSubdocIds := conf.GetStringList("webconfig.valid_subdoc_ids")
 	validSubdocIdMap := maps.Clone(common.SubdocBitIndexMap)
 	for _, x := range validSubdocIds {
 		validSubdocIdMap[x] = 1
 	}
-	minTrust := int(conf.GetInt32("webconfig.min_trust"))
 
 	ws := &WebconfigServer{
 		Server: &http.Server{
@@ -332,9 +334,10 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		supplementaryAppendingEnabled: supplementaryAppendingEnabled,
 		kafkaProducerEnabled:          kafkaProducerEnabled,
 		kafkaProducerTopic:            kafkaProducerTopic,
+		upstreamProfilesEnabled:       upstreamProfilesEnabled,
 		queryParamsValidationEnabled:  queryParamsValidationEnabled,
-		validSubdocIdMap:              validSubdocIdMap,
 		minTrust:                      minTrust,
+		validSubdocIdMap:              validSubdocIdMap,
 	}
 	// Init the child poke span name
 	ws.webpaPokeSpanTemplate = ws.WebpaConnector.PokeSpanTemplate()
@@ -662,6 +665,14 @@ func (s *WebconfigServer) SetKafkaProducerTopic(x string) {
 	s.kafkaProducerTopic = x
 }
 
+func (s *WebconfigServer) UpstreamProfilesEnabled() bool {
+	return s.upstreamProfilesEnabled
+}
+
+func (s *WebconfigServer) SetUpstreamProfilesEnabled(enabled bool) {
+	s.upstreamProfilesEnabled = enabled
+}
+
 func (s *WebconfigServer) QueryParamsValidationEnabled() bool {
 	return s.queryParamsValidationEnabled
 }
@@ -670,20 +681,20 @@ func (s *WebconfigServer) SetQueryParamsValidationEnabled(enabled bool) {
 	s.queryParamsValidationEnabled = enabled
 }
 
-func (s *WebconfigServer) ValidSubdocIdMap() map[string]int {
-	return s.validSubdocIdMap
-}
-
-func (s *WebconfigServer) SetValidSubdocIdMap(x map[string]int) {
-	s.validSubdocIdMap = x
-}
-
 func (s *WebconfigServer) MinTrust() int {
 	return s.minTrust
 }
 
 func (s *WebconfigServer) SetMinTrust(trust int) {
 	s.minTrust = trust
+}
+
+func (s *WebconfigServer) ValidSubdocIdMap() map[string]int {
+	return s.validSubdocIdMap
+}
+
+func (s *WebconfigServer) SetValidSubdocIdMap(x map[string]int) {
+	s.validSubdocIdMap = x
 }
 
 func (s *WebconfigServer) ValidatePartner(parsedPartner string) error {
