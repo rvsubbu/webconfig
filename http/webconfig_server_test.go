@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package http
 
 import (
@@ -97,4 +97,12 @@ func TestWebconfigServerSetterGetter(t *testing.T) {
 	validPartners = []string{"name3", "name4", "name5"}
 	server.SetValidPartners(validPartners)
 	assert.DeepEqual(t, server.ValidPartners(), validPartners)
+
+	// get profiles from upstream
+	enabled = true
+	server.SetUpstreamProfilesEnabled(enabled)
+	assert.Equal(t, server.UpstreamProfilesEnabled(), enabled)
+	enabled = false
+	server.SetUpstreamProfilesEnabled(enabled)
+	assert.Equal(t, server.UpstreamProfilesEnabled(), enabled)
 }
