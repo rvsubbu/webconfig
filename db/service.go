@@ -194,6 +194,8 @@ func BuildGetDocument(c DatabaseClient, inHeader http.Header, route string, fiel
 			if len(cloudVersion) == 0 {
 				continue
 			}
+			cloudErrorCode := *subdocument.ErrorCode()
+			cloudErrorDetails := *subdocument.ErrorDetails()
 			deviceVersion := deviceVersionMap[subdocId]
 			if cloudVersion == deviceVersion && cloudState >= common.PendingDownload && cloudState <= common.Failure {
 				labels := prometheus.Labels{
@@ -203,6 +205,14 @@ func BuildGetDocument(c DatabaseClient, inHeader http.Header, route string, fiel
 				// update state
 				newState := common.Deployed
 				subdocument.SetState(&newState)
+				if cloudErrorCode > 0 {
+					var newErrorCode int
+					subdocument.SetErrorCode(&newErrorCode)
+				}
+				if len(cloudErrorDetails) > 0 {
+					var newErrorDetails string
+					subdocument.SetErrorDetails(&newErrorDetails)
+				}
 				if err := c.SetSubDocument(mac, subdocId, &subdocument, cloudState, labels, fields); err != nil {
 					return nil, cloudRootDocument, deviceRootDocument, deviceVersionMap, false, nil, common.NewError(err)
 				}
