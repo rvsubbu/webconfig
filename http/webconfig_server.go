@@ -118,6 +118,7 @@ type WebconfigServer struct {
 	webpaPokeSpanTemplate         string
 	kafkaProducerEnabled          bool
 	kafkaProducerTopic            string
+	upstreamProfilesEnabled       bool
 }
 
 func NewTlsConfig(conf *configuration.Config) (*tls.Config, error) {
@@ -284,6 +285,8 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		}
 	}
 
+	upstreamProfilesEnabled := conf.GetBoolean("webconfig.upstream_profiles_enabled")
+
 	ws := &WebconfigServer{
 		Server: &http.Server{
 			Addr:         fmt.Sprintf("%v:%v", listenHost, port),
@@ -318,6 +321,7 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		supplementaryAppendingEnabled: supplementaryAppendingEnabled,
 		kafkaProducerEnabled:          kafkaProducerEnabled,
 		kafkaProducerTopic:            kafkaProducerTopic,
+		upstreamProfilesEnabled:       upstreamProfilesEnabled,
 	}
 	// Init the child poke span name
 	ws.webpaPokeSpanTemplate = ws.WebpaConnector.PokeSpanTemplate()
@@ -632,6 +636,14 @@ func (s *WebconfigServer) KafkaProducerTopic() string {
 
 func (s *WebconfigServer) SetKafkaProducerTopic(x string) {
 	s.kafkaProducerTopic = x
+}
+
+func (s *WebconfigServer) UpstreamProfilesEnabled() bool {
+	return s.upstreamProfilesEnabled
+}
+
+func (s *WebconfigServer) SetUpstreamProfilesEnabled(enabled bool) {
+	s.upstreamProfilesEnabled = enabled
 }
 
 func (s *WebconfigServer) ValidatePartner(parsedPartner string) error {

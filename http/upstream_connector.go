@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package http
 
 import (
@@ -22,15 +22,16 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/go-akka/configuration"
 	"github.com/rdkcentral/webconfig/common"
 	owcommon "github.com/rdkcentral/webconfig/common"
-	"github.com/go-akka/configuration"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
 	upstreamHostDefault        = "http://localhost:1234"
-	upstreamUrlTemplateDefault = "/api/v1/device/%v/upstream"
+	defaultUpstreamUrlTemplate = "/api/v1/device/%v/upstream"
+	defaultProfileUrlTemplate  = "/api/v1/device/%v/profile?%v"
 )
 
 type UpstreamConnector struct {
@@ -38,6 +39,7 @@ type UpstreamConnector struct {
 	host                string
 	serviceName         string
 	upstreamUrlTemplate string
+	profileUrlTemplate  string
 }
 
 func NewUpstreamConnector(conf *configuration.Config, tlsConfig *tls.Config) *UpstreamConnector {
@@ -45,13 +47,16 @@ func NewUpstreamConnector(conf *configuration.Config, tlsConfig *tls.Config) *Up
 	confKey := fmt.Sprintf("webconfig.%v.host", serviceName)
 	host := conf.GetString(confKey, upstreamHostDefault)
 	confKey = fmt.Sprintf("webconfig.%v.url_template", serviceName)
-	upstreamUrlTemplate := conf.GetString(confKey, upstreamUrlTemplateDefault)
+	upstreamUrlTemplate := conf.GetString(confKey, defaultUpstreamUrlTemplate)
+	confKey = fmt.Sprintf("webconfig.%v.profile_url_template", serviceName)
+	profileUrlTemplate := conf.GetString(confKey, defaultProfileUrlTemplate)
 
 	return &UpstreamConnector{
 		HttpClient:          NewHttpClient(conf, serviceName, tlsConfig),
 		host:                host,
 		serviceName:         serviceName,
 		upstreamUrlTemplate: upstreamUrlTemplate,
+		profileUrlTemplate:  profileUrlTemplate,
 	}
 }
 
@@ -85,6 +90,30 @@ func (c *UpstreamConnector) PostUpstream(mac string, header http.Header, bbytes 
 	}
 
 	rbytes, header, err := c.DoWithRetries("POST", url, header, bbytes, fields, c.ServiceName())
+	if err != nil {
+		return rbytes, header, owcommon.NewError(err)
+	}
+	return rbytes, header, nil
+}
+
+func (c *UpstreamConnector) GetUpstreamProfiles(mac, queryParams string, header http.Header, fields log.Fields) ([]byte, http.Header, error) {
+	url := c.UpstreamHost() + fmt.Sprintf(c.profileUrlTemplate, mac, queryParams)
+
+	if itf, ok := fields["audit_id"]; ok {
+		auditId := itf.(string)
+		if len(auditId) > 0 {
+			header.Set(common.HeaderAuditid, auditId)
+		}
+	}
+
+	if itf, ok := fields["app_name"]; ok {
+		appName := itf.(string)
+		if len(appName) > 0 {
+			header.Set(common.HeaderSourceAppName, appName)
+		}
+	}
+
+	rbytes, header, err := c.DoWithRetries("GET", url, header, nil, fields, c.ServiceName())
 	if err != nil {
 		return rbytes, header, owcommon.NewError(err)
 	}
