@@ -1065,7 +1065,11 @@ func TestStateCorrectionEnabled(t *testing.T) {
 	assert.NilError(t, err)
 
 	meshState := common.Failure
+	meshErrorCode := 307
+	meshErrorDetails := "NACK:OneWifi,"
 	meshSubdocument.SetState(&meshState)
+	meshSubdocument.SetErrorCode(&meshErrorCode)
+	meshSubdocument.SetErrorDetails(&meshErrorDetails)
 	err = server.SetSubDocument(cpeMac, "mesh", meshSubdocument)
 	assert.NilError(t, err)
 
@@ -1100,6 +1104,8 @@ func TestStateCorrectionEnabled(t *testing.T) {
 	meshSubdocument, err = server.GetSubDocument(cpeMac, "mesh")
 	assert.NilError(t, err)
 	assert.Equal(t, meshSubdocument.GetState(), common.Failure)
+	assert.Equal(t, *meshSubdocument.ErrorCode(), meshErrorCode)
+	assert.Equal(t, *meshSubdocument.ErrorDetails(), meshErrorDetails)
 
 	mocaSubdocument, err = server.GetSubDocument(cpeMac, "moca")
 	assert.NilError(t, err)
@@ -1132,6 +1138,8 @@ func TestStateCorrectionEnabled(t *testing.T) {
 	meshSubdocument, err = server.GetSubDocument(cpeMac, "mesh")
 	assert.NilError(t, err)
 	assert.Equal(t, meshSubdocument.GetState(), common.Deployed)
+	assert.Equal(t, *meshSubdocument.ErrorCode(), 0)
+	assert.Equal(t, *meshSubdocument.ErrorDetails(), "")
 
 	mocaSubdocument, err = server.GetSubDocument(cpeMac, "moca")
 	assert.NilError(t, err)
