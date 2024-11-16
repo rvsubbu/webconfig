@@ -33,6 +33,7 @@ const (
 var (
 	ErrNotOK              = fmt.Errorf("!ok")
 	ErrRootDocumentLocked = fmt.Errorf("root document is locked")
+	ErrInvalidQueryParams = fmt.Errorf("invalid query parameters")
 )
 
 type Http400Error struct {
