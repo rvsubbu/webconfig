@@ -119,6 +119,7 @@ type WebconfigServer struct {
 	kafkaProducerEnabled          bool
 	kafkaProducerTopic            string
 	upstreamProfilesEnabled       bool
+	queryParamsValidationEnabled  bool
 }
 
 func NewTlsConfig(conf *configuration.Config) (*tls.Config, error) {
@@ -286,6 +287,7 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 	}
 
 	upstreamProfilesEnabled := conf.GetBoolean("webconfig.upstream_profiles_enabled")
+	queryParamsValidationEnabled := conf.GetBoolean("webconfig.query_params_validation_enabled")
 
 	ws := &WebconfigServer{
 		Server: &http.Server{
@@ -322,6 +324,7 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		kafkaProducerEnabled:          kafkaProducerEnabled,
 		kafkaProducerTopic:            kafkaProducerTopic,
 		upstreamProfilesEnabled:       upstreamProfilesEnabled,
+		queryParamsValidationEnabled:  queryParamsValidationEnabled,
 	}
 	// Init the child poke span name
 	ws.webpaPokeSpanTemplate = ws.WebpaConnector.PokeSpanTemplate()
@@ -644,6 +647,14 @@ func (s *WebconfigServer) UpstreamProfilesEnabled() bool {
 
 func (s *WebconfigServer) SetUpstreamProfilesEnabled(enabled bool) {
 	s.upstreamProfilesEnabled = enabled
+}
+
+func (s *WebconfigServer) QueryParamsValidationEnabled() bool {
+	return s.queryParamsValidationEnabled
+}
+
+func (s *WebconfigServer) SetQueryParamsValidationEnabled(enabled bool) {
+	s.queryParamsValidationEnabled = enabled
 }
 
 func (s *WebconfigServer) ValidatePartner(parsedPartner string) error {

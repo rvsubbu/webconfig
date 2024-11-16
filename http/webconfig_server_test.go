@@ -105,4 +105,12 @@ func TestWebconfigServerSetterGetter(t *testing.T) {
 	enabled = false
 	server.SetUpstreamProfilesEnabled(enabled)
 	assert.Equal(t, server.UpstreamProfilesEnabled(), enabled)
+
+	// enforce strict query parameters validation
+	enabled = true
+	server.SetQueryParamsValidationEnabled(enabled)
+	assert.Equal(t, server.QueryParamsValidationEnabled(), enabled)
+	enabled = false
+	server.SetQueryParamsValidationEnabled(enabled)
+	assert.Equal(t, server.QueryParamsValidationEnabled(), enabled)
 }

@@ -1308,3 +1308,174 @@ func TestCorruptedEncryptedDocumentHandler(t *testing.T) {
 	_, ok = mpartMap["privatessid"]
 	assert.Assert(t, !ok)
 }
+
+func TestValidateQueryParams(t *testing.T) {
+	server := NewWebconfigServer(sc, true)
+	router := server.GetRouter(true)
+	server.SetQueryParamsValidationEnabled(true)
+	assert.Assert(t, server.QueryParamsValidationEnabled())
+	defer server.SetQueryParamsValidationEnabled(false)
+
+	cpeMac := util.GenerateRandomCpeMac()
+	// ==== group 1 lan ====
+	subdocId := "lan"
+	m, n := 50, 100
+	lanBytes := util.RandomBytes(m, n)
+
+	// post
+	url := fmt.Sprintf("/api/v1/device/%v/document/%v", cpeMac, subdocId)
+	req, err := http.NewRequest("POST", url, bytes.NewReader(lanBytes))
+	req.Header.Set(common.HeaderContentType, common.HeaderApplicationMsgpack)
+	assert.NilError(t, err)
+	res := ExecuteRequest(req, router).Result()
+	rbytes, err := io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusOK)
+
+	// get
+	req, err = http.NewRequest("GET", url, nil)
+	req.Header.Set(common.HeaderContentType, common.HeaderApplicationMsgpack)
+	assert.NilError(t, err)
+	res = ExecuteRequest(req, router).Result()
+	rbytes, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusOK)
+	assert.DeepEqual(t, rbytes, lanBytes)
+
+	// ==== group 2 wan ====
+	subdocId = "wan"
+	wanBytes := util.RandomBytes(m, n)
+
+	// post
+	url = fmt.Sprintf("/api/v1/device/%v/document/%v", cpeMac, subdocId)
+	req, err = http.NewRequest("POST", url, bytes.NewReader(wanBytes))
+	req.Header.Set(common.HeaderContentType, common.HeaderApplicationMsgpack)
+	assert.NilError(t, err)
+	res = ExecuteRequest(req, router).Result()
+	rbytes, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusOK)
+
+	// get
+	req, err = http.NewRequest("GET", url, nil)
+	req.Header.Set(common.HeaderContentType, common.HeaderApplicationMsgpack)
+	assert.NilError(t, err)
+	res = ExecuteRequest(req, router).Result()
+	rbytes, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusOK)
+	assert.DeepEqual(t, rbytes, wanBytes)
+
+	// case 1
+	deviceConfigUrl := fmt.Sprintf("/api/v1/device/%v/config", cpeMac)
+	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
+	assert.NilError(t, err)
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusBadRequest)
+
+	// case 2
+	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?foo=bar", cpeMac)
+	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
+	assert.NilError(t, err)
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusBadRequest)
+
+	// case 3
+	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?group_id", cpeMac)
+	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
+	assert.NilError(t, err)
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusBadRequest)
+
+	// case 4
+	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?group_id=root", cpeMac)
+	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
+	assert.NilError(t, err)
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusBadRequest)
+
+	// case 5
+	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?group_id=root,foo", cpeMac)
+	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
+	assert.NilError(t, err)
+	req.Header.Set(common.HeaderIfNoneMatch, "123,234")
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusBadRequest)
+
+	// case 6
+	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?group_id=root,privatessid,foo", cpeMac)
+	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
+	assert.NilError(t, err)
+	req.Header.Set(common.HeaderIfNoneMatch, "123,234,345")
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusBadRequest)
+
+	// case 7
+	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?group_id=root,privatessid,homessid", cpeMac)
+	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
+	assert.NilError(t, err)
+	req.Header.Set(common.HeaderIfNoneMatch, "123,234,345,456")
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusBadRequest)
+
+	// case 8
+	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?group_id=root", cpeMac)
+	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
+	assert.NilError(t, err)
+	req.Header.Set(common.HeaderIfNoneMatch, "123")
+	res = ExecuteRequest(req, router).Result()
+	rbytes, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusOK)
+
+	mparts, err := util.ParseMultipart(res.Header, rbytes)
+	assert.NilError(t, err)
+	assert.Equal(t, len(mparts), 2)
+	etag := res.Header.Get(common.HeaderEtag)
+	mpart, ok := mparts["lan"]
+	assert.Assert(t, ok)
+	assert.DeepEqual(t, mpart.Bytes, lanBytes)
+	lanMpartVersion := mpart.Version
+	mpart, ok = mparts["wan"]
+	assert.Assert(t, ok)
+	assert.DeepEqual(t, mpart.Bytes, wanBytes)
+	wanMpartVersion := mpart.Version
+	matchedIfNoneMatch := fmt.Sprintf("%v,%v,%v", etag, lanMpartVersion, wanMpartVersion)
+
+	// case 9 versions matched 304
+	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?group_id=root,lan,wan", cpeMac)
+	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
+	assert.NilError(t, err)
+	req.Header.Set(common.HeaderIfNoneMatch, matchedIfNoneMatch)
+	res = ExecuteRequest(req, router).Result()
+	_, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusNotModified)
+}
