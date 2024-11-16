@@ -231,8 +231,14 @@ func BuildGetDocument(c DatabaseClient, inHeader http.Header, route string, fiel
 	}
 
 	// eval if the root_document is locked
-	if c.LockRootDocumentEnabled() && cloudRootDocument.Locked() {
-		return nil, cloudRootDocument, deviceRootDocument, deviceVersionMap, false, messages, common.NewError(common.ErrRootDocumentLocked)
+	if cloudRootDocument.Locked() {
+		if c.LockRootDocumentEnabled() {
+			return nil, cloudRootDocument, deviceRootDocument, deviceVersionMap, false, messages, common.NewError(common.ErrRootDocumentLocked)
+		} else {
+			tfields := common.FilterLogFields(fields)
+			tfields["logger"] = "rootdoc"
+			log.WithFields(tfields).Warn("dryrun409")
+		}
 	}
 
 	switch rootCmpEnum {

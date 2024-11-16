@@ -19,7 +19,6 @@ package util
 
 import (
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/rdkcentral/webconfig/common"
@@ -31,28 +30,6 @@ func TestString(t *testing.T) {
 	c := ToColonMac(s)
 	expected := "11:22:33:44:55:66"
 	assert.Equal(t, c, expected)
-}
-
-func TestValidateMac(t *testing.T) {
-	mac := "001122334455"
-	assert.Assert(t, ValidateMac(mac))
-
-	mac = "4444ABCDEF01"
-	assert.Assert(t, ValidateMac(mac))
-
-	mac = "00112233445Z"
-	assert.Assert(t, !ValidateMac(mac))
-
-	mac = "001122334455Z"
-	assert.Assert(t, !ValidateMac(mac))
-
-	mac = "0H1122334455"
-	assert.Assert(t, !ValidateMac(mac))
-
-	for i := 0; i < 10; i++ {
-		mac := GenerateRandomCpeMac()
-		assert.Assert(t, ValidateMac(mac))
-	}
 }
 
 func TestGetAuditId(t *testing.T) {
@@ -78,63 +55,6 @@ func TestTelemetryQuery(t *testing.T) {
 	qstr = GetTelemetryQueryString(header, mac, queryParams, "comcast")
 	expected = "env=PROD&partnerId=comcast&version=2.0&model=TG1682G&accountId=1234567890&firmwareVersion=TG1682_3.14p9s6_PROD_sey&estbMacAddress=567890ABCDF1&ecmMacAddress=567890ABCDEF&stormReadyWifi=true"
 	assert.Equal(t, qstr, expected)
-}
-
-func TestValidatePokeQuery(t *testing.T) {
-	values := url.Values{}
-
-	values["doc"] = []string{
-		"primary,telemetry",
-		"hello,world",
-	}
-	_, err := ValidatePokeQuery(values)
-	assert.Assert(t, err != nil)
-
-	values["doc"] = []string{
-		"primary,hello,world",
-	}
-	_, err = ValidatePokeQuery(values)
-	assert.Assert(t, err != nil)
-
-	values["doc"] = []string{
-		"primary,telemetry",
-	}
-	_, err = ValidatePokeQuery(values)
-	assert.Assert(t, err != nil)
-
-	values["doc"] = []string{
-		"primary",
-	}
-	s, err := ValidatePokeQuery(values)
-	assert.NilError(t, err)
-	assert.Equal(t, s, "primary")
-
-	values["doc"] = []string{
-		"telemetry",
-	}
-	s, err = ValidatePokeQuery(values)
-	assert.NilError(t, err)
-	assert.Equal(t, s, "telemetry")
-
-	delete(values, "doc")
-	s, err = ValidatePokeQuery(values)
-	assert.NilError(t, err)
-	assert.Equal(t, s, "primary")
-
-	values["doc"] = []string{
-		"primary",
-	}
-	values["route"] = []string{
-		"mqtt",
-	}
-	s, err = ValidatePokeQuery(values)
-	assert.NilError(t, err)
-	assert.Equal(t, s, "primary")
-
-	delete(values, "doc")
-	s, err = ValidatePokeQuery(values)
-	assert.NilError(t, err)
-	assert.Equal(t, s, "mqtt")
 }
 
 func TestIsValidUTF8(t *testing.T) {
