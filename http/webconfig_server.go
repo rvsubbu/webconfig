@@ -120,6 +120,7 @@ type WebconfigServer struct {
 	kafkaProducerTopic            string
 	upstreamProfilesEnabled       bool
 	queryParamsValidationEnabled  bool
+	minTrust                      int
 }
 
 func NewTlsConfig(conf *configuration.Config) (*tls.Config, error) {
@@ -204,12 +205,14 @@ func GetDatabaseClient(sc *common.ServerConfig) db.DatabaseClient {
 func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer {
 	conf := sc.Config
 	var dbclient db.DatabaseClient
+	var tokenManager *security.TokenManager
 
 	// setup up database client
 	if testOnly {
 		dbclient = GetTestDatabaseClient(sc)
 	} else {
 		dbclient = GetDatabaseClient(sc)
+		tokenManager = security.NewTokenManager(conf)
 	}
 
 	// setup jwks manager
@@ -288,6 +291,7 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 
 	upstreamProfilesEnabled := conf.GetBoolean("webconfig.upstream_profiles_enabled")
 	queryParamsValidationEnabled := conf.GetBoolean("webconfig.query_params_validation_enabled")
+	minTrust := int(conf.GetInt32("webconfig.min_trust"))
 
 	ws := &WebconfigServer{
 		Server: &http.Server{
@@ -296,7 +300,7 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 			WriteTimeout: time.Duration(conf.GetInt32("webconfig.server.write_timeout_in_secs", 3)) * time.Second,
 		},
 		DatabaseClient:                dbclient,
-		TokenManager:                  security.NewTokenManager(conf),
+		TokenManager:                  tokenManager,
 		JwksManager:                   jwksManager,
 		ServerConfig:                  sc,
 		WebpaConnector:                NewWebpaConnector(conf, tlsConfig),
@@ -325,6 +329,7 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		kafkaProducerTopic:            kafkaProducerTopic,
 		upstreamProfilesEnabled:       upstreamProfilesEnabled,
 		queryParamsValidationEnabled:  queryParamsValidationEnabled,
+		minTrust:                      minTrust,
 	}
 	// Init the child poke span name
 	ws.webpaPokeSpanTemplate = ws.WebpaConnector.PokeSpanTemplate()
@@ -390,13 +395,20 @@ func (s *WebconfigServer) CpeMiddleware(next http.Handler) http.Handler {
 				return
 			}
 
-			if ok, partnerId, err := s.VerifyCpeToken(token, strings.ToLower(mac)); ok {
+			if ok, partnerId, trust, err := s.VerifyCpeToken(token, strings.ToLower(mac)); ok {
 				isValid = true
+				fields := xw.Audit()
+				fields["src_partner"] = partnerId
+				fields["trust"] = trust
+
 				if err := s.ValidatePartner(partnerId); err != nil {
-					fields := xw.Audit()
-					fields["src_partner"] = partnerId
+					// isValid = false
 					partnerId = "unknown"
 					tokenErr = common.NewError(err)
+				}
+				if trust < s.MinTrust() {
+					isValid = false
+					tokenErr = common.NewError(common.ErrLowTrust)
 				}
 				xw.SetPartnerId(partnerId)
 			} else {
@@ -475,7 +487,7 @@ func (s *WebconfigServer) TestingCpeMiddleware(next http.Handler) http.Handler {
 				return
 			}
 
-			if ok, _, _ := s.VerifyCpeToken(token, strings.ToLower(mac)); ok {
+			if ok, _, _, _ := s.VerifyCpeToken(token, strings.ToLower(mac)); ok {
 				isValid = true
 			}
 		}
@@ -655,6 +667,14 @@ func (s *WebconfigServer) QueryParamsValidationEnabled() bool {
 
 func (s *WebconfigServer) SetQueryParamsValidationEnabled(enabled bool) {
 	s.queryParamsValidationEnabled = enabled
+}
+
+func (s *WebconfigServer) MinTrust() int {
+	return s.minTrust
+}
+
+func (s *WebconfigServer) SetMinTrust(trust int) {
+	s.minTrust = trust
 }
 
 func (s *WebconfigServer) ValidatePartner(parsedPartner string) error {

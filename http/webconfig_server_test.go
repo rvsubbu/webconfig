@@ -113,4 +113,12 @@ func TestWebconfigServerSetterGetter(t *testing.T) {
 	enabled = false
 	server.SetQueryParamsValidationEnabled(enabled)
 	assert.Equal(t, server.QueryParamsValidationEnabled(), enabled)
+
+	//configure trust level
+	trust := 1000
+	server.SetMinTrust(trust)
+	assert.Equal(t, server.MinTrust(), trust)
+	trust = 500
+	server.SetMinTrust(trust)
+	assert.Equal(t, server.MinTrust(), trust)
 }
