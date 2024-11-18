@@ -75,11 +75,18 @@ func (s *WebconfigServer) MultipartConfigHandler(w http.ResponseWriter, r *http.
 		return
 	}
 	fields := xw.Audit()
-
 	fields["cpe_mac"] = mac
-	if qGroupIds, ok := r.URL.Query()["group_id"]; ok {
-		fields["group_id"] = qGroupIds[0]
-		r.Header.Set(common.HeaderDocName, qGroupIds[0])
+
+	// enforce strict query parameters check
+	err := util.ValidateQueryParams(r, fields)
+	if err != nil && s.QueryParamsValidationEnabled() {
+		if errors.Is(err, common.ErrInvalidQueryParams) {
+			Error(w, http.StatusBadRequest, nil)
+			log.WithFields(fields).Error(err)
+			return
+		}
+		Error(w, http.StatusInternalServerError, err)
+		return
 	}
 
 	// handle empty schema version header
