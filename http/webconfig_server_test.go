@@ -121,4 +121,14 @@ func TestWebconfigServerSetterGetter(t *testing.T) {
 	trust = 500
 	server.SetMinTrust(trust)
 	assert.Equal(t, server.MinTrust(), trust)
+
+	validSubdocIdMap := map[string]int{
+		"red":    1,
+		"orange": 2,
+		"yellow": 3,
+		"green":  4,
+	}
+	server.SetValidSubdocIdMap(validSubdocIdMap)
+	assert.DeepEqual(t, validSubdocIdMap, server.ValidSubdocIdMap())
+
 }

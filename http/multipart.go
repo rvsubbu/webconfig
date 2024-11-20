@@ -78,7 +78,7 @@ func (s *WebconfigServer) MultipartConfigHandler(w http.ResponseWriter, r *http.
 	fields["cpe_mac"] = mac
 
 	// enforce strict query parameters check
-	err := util.ValidateQueryParams(r, fields)
+	err := util.ValidateQueryParams(r, s.ValidSubdocIdMap(), fields)
 	if err != nil && s.QueryParamsValidationEnabled() {
 		if errors.Is(err, common.ErrInvalidQueryParams) {
 			Error(w, http.StatusBadRequest, nil)
