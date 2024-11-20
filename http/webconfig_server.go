@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"strings"
@@ -119,6 +120,7 @@ type WebconfigServer struct {
 	kafkaProducerEnabled          bool
 	kafkaProducerTopic            string
 	queryParamsValidationEnabled  bool
+	validSubdocIdMap              map[string]int
 }
 
 func NewTlsConfig(conf *configuration.Config) (*tls.Config, error) {
@@ -286,6 +288,11 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 	}
 
 	queryParamsValidationEnabled := conf.GetBoolean("webconfig.query_params_validation_enabled")
+	validSubdocIds := conf.GetStringList("webconfig.valid_subdoc_ids")
+	validSubdocIdMap := maps.Clone(common.SubdocBitIndexMap)
+	for _, x := range validSubdocIds {
+		validSubdocIdMap[x] = 1
+	}
 
 	ws := &WebconfigServer{
 		Server: &http.Server{
@@ -322,6 +329,7 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		kafkaProducerEnabled:          kafkaProducerEnabled,
 		kafkaProducerTopic:            kafkaProducerTopic,
 		queryParamsValidationEnabled:  queryParamsValidationEnabled,
+		validSubdocIdMap:              validSubdocIdMap,
 	}
 	// Init the child poke span name
 	ws.webpaPokeSpanTemplate = ws.WebpaConnector.PokeSpanTemplate()
@@ -644,6 +652,14 @@ func (s *WebconfigServer) QueryParamsValidationEnabled() bool {
 
 func (s *WebconfigServer) SetQueryParamsValidationEnabled(enabled bool) {
 	s.queryParamsValidationEnabled = enabled
+}
+
+func (s *WebconfigServer) ValidSubdocIdMap() map[string]int {
+	return s.validSubdocIdMap
+}
+
+func (s *WebconfigServer) SetValidSubdocIdMap(x map[string]int) {
+	s.validSubdocIdMap = x
 }
 
 func (s *WebconfigServer) ValidatePartner(parsedPartner string) error {

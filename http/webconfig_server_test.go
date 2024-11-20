@@ -105,4 +105,13 @@ func TestWebconfigServerSetterGetter(t *testing.T) {
 	enabled = false
 	server.SetQueryParamsValidationEnabled(enabled)
 	assert.Equal(t, server.QueryParamsValidationEnabled(), enabled)
+
+	validSubdocIdMap := map[string]int{
+		"red":    1,
+		"orange": 2,
+		"yellow": 3,
+		"green":  4,
+	}
+	server.SetValidSubdocIdMap(validSubdocIdMap)
+	assert.DeepEqual(t, validSubdocIdMap, server.ValidSubdocIdMap())
 }
