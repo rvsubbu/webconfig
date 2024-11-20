@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"strings"
@@ -121,6 +122,7 @@ type WebconfigServer struct {
 	upstreamProfilesEnabled       bool
 	queryParamsValidationEnabled  bool
 	minTrust                      int
+	validSubdocIdMap              map[string]int
 }
 
 func NewTlsConfig(conf *configuration.Config) (*tls.Config, error) {
@@ -292,6 +294,11 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 	upstreamProfilesEnabled := conf.GetBoolean("webconfig.upstream_profiles_enabled")
 	queryParamsValidationEnabled := conf.GetBoolean("webconfig.query_params_validation_enabled")
 	minTrust := int(conf.GetInt32("webconfig.min_trust"))
+	validSubdocIds := conf.GetStringList("webconfig.valid_subdoc_ids")
+	validSubdocIdMap := maps.Clone(common.SubdocBitIndexMap)
+	for _, x := range validSubdocIds {
+		validSubdocIdMap[x] = 1
+	}
 
 	ws := &WebconfigServer{
 		Server: &http.Server{
@@ -330,6 +337,7 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		upstreamProfilesEnabled:       upstreamProfilesEnabled,
 		queryParamsValidationEnabled:  queryParamsValidationEnabled,
 		minTrust:                      minTrust,
+		validSubdocIdMap:              validSubdocIdMap,
 	}
 	// Init the child poke span name
 	ws.webpaPokeSpanTemplate = ws.WebpaConnector.PokeSpanTemplate()
@@ -675,6 +683,14 @@ func (s *WebconfigServer) MinTrust() int {
 
 func (s *WebconfigServer) SetMinTrust(trust int) {
 	s.minTrust = trust
+}
+
+func (s *WebconfigServer) ValidSubdocIdMap() map[string]int {
+	return s.validSubdocIdMap
+}
+
+func (s *WebconfigServer) SetValidSubdocIdMap(x map[string]int) {
+	s.validSubdocIdMap = x
 }
 
 func (s *WebconfigServer) ValidatePartner(parsedPartner string) error {

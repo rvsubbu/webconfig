@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package util
 
 import (
@@ -88,7 +88,7 @@ func ValidatePokeQuery(values url.Values) (string, error) {
 	return "primary", nil
 }
 
-func ValidateQueryParams(r *http.Request, fields log.Fields) error {
+func ValidateQueryParams(r *http.Request, validSubdocIdMap map[string]int, fields log.Fields) error {
 	groupIdValues, ok := r.URL.Query()["group_id"]
 	if !ok || len(groupIdValues) == 0 {
 		return common.NewError(common.ErrInvalidQueryParams)
@@ -106,7 +106,7 @@ func ValidateQueryParams(r *http.Request, fields log.Fields) error {
 	}
 
 	for _, subdocId := range subdocIds[1:] {
-		if _, ok := common.SubdocBitIndexMap[subdocId]; !ok {
+		if _, ok := validSubdocIdMap[subdocId]; !ok {
 			return common.NewError(common.ErrInvalidQueryParams)
 		}
 	}

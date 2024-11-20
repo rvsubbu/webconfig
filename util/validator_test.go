@@ -14,12 +14,13 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package util
 
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"testing"
@@ -110,34 +111,37 @@ func TestValidatePokeQuery(t *testing.T) {
 
 func TestValidateQueryParams(t *testing.T) {
 	cpeMac := GenerateRandomCpeMac()
+	validSubdocIdMap := maps.Clone(common.SubdocBitIndexMap)
+	validSubdocIdMap["red"] = 1
+	validSubdocIdMap["orange"] = 1
 
 	// case 1
 	deviceConfigUrl := fmt.Sprintf("/api/v1/device/%v/config", cpeMac)
 	req, err := http.NewRequest("GET", deviceConfigUrl, nil)
 	assert.NilError(t, err)
 	fields := make(log.Fields)
-	err = ValidateQueryParams(req, fields)
+	err = ValidateQueryParams(req, validSubdocIdMap, fields)
 	assert.Assert(t, errors.Is(err, common.ErrInvalidQueryParams))
 
 	// case 2
 	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?foo=bar", cpeMac)
 	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
 	assert.NilError(t, err)
-	err = ValidateQueryParams(req, fields)
+	err = ValidateQueryParams(req, validSubdocIdMap, fields)
 	assert.Assert(t, errors.Is(err, common.ErrInvalidQueryParams))
 
 	// case 3
 	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?group_id", cpeMac)
 	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
 	assert.NilError(t, err)
-	err = ValidateQueryParams(req, fields)
+	err = ValidateQueryParams(req, validSubdocIdMap, fields)
 	assert.Assert(t, errors.Is(err, common.ErrInvalidQueryParams))
 
 	// case 4
 	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?group_id=root", cpeMac)
 	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
 	assert.NilError(t, err)
-	err = ValidateQueryParams(req, fields)
+	err = ValidateQueryParams(req, validSubdocIdMap, fields)
 	assert.Assert(t, errors.Is(err, common.ErrInvalidQueryParams))
 
 	// case 5
@@ -145,7 +149,7 @@ func TestValidateQueryParams(t *testing.T) {
 	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
 	assert.NilError(t, err)
 	req.Header.Set(common.HeaderIfNoneMatch, "123,234")
-	err = ValidateQueryParams(req, fields)
+	err = ValidateQueryParams(req, validSubdocIdMap, fields)
 	assert.Assert(t, errors.Is(err, common.ErrInvalidQueryParams))
 
 	// case 6
@@ -153,7 +157,7 @@ func TestValidateQueryParams(t *testing.T) {
 	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
 	assert.NilError(t, err)
 	req.Header.Set(common.HeaderIfNoneMatch, "123,234,345")
-	err = ValidateQueryParams(req, fields)
+	err = ValidateQueryParams(req, validSubdocIdMap, fields)
 	assert.Assert(t, errors.Is(err, common.ErrInvalidQueryParams))
 
 	// case 7
@@ -161,7 +165,7 @@ func TestValidateQueryParams(t *testing.T) {
 	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
 	assert.NilError(t, err)
 	req.Header.Set(common.HeaderIfNoneMatch, "123,234,345,456")
-	err = ValidateQueryParams(req, fields)
+	err = ValidateQueryParams(req, validSubdocIdMap, fields)
 	assert.Assert(t, errors.Is(err, common.ErrInvalidQueryParams))
 
 	// case 8
@@ -169,6 +173,14 @@ func TestValidateQueryParams(t *testing.T) {
 	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
 	assert.NilError(t, err)
 	req.Header.Set(common.HeaderIfNoneMatch, "123,234,345,456")
-	err = ValidateQueryParams(req, fields)
+	err = ValidateQueryParams(req, validSubdocIdMap, fields)
+	assert.NilError(t, err)
+
+	// case 9
+	deviceConfigUrl = fmt.Sprintf("/api/v1/device/%v/config?group_id=root,privatessid,homessid,red,orange", cpeMac)
+	req, err = http.NewRequest("GET", deviceConfigUrl, nil)
+	assert.NilError(t, err)
+	req.Header.Set(common.HeaderIfNoneMatch, "123,234,345,456,678")
+	err = ValidateQueryParams(req, validSubdocIdMap, fields)
 	assert.NilError(t, err)
 }
