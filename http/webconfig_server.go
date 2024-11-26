@@ -393,6 +393,7 @@ func (s *WebconfigServer) CpeMiddleware(next http.Handler) http.Handler {
 
 		isValid := false
 		token := xw.Token()
+		fields := xw.Audit()
 		authorization := r.Header.Get("Authorization")
 		var tokenErr error
 		if len(token) > 0 {
@@ -405,7 +406,6 @@ func (s *WebconfigServer) CpeMiddleware(next http.Handler) http.Handler {
 
 			if ok, partnerId, trust, err := s.VerifyCpeToken(token, strings.ToLower(mac)); ok {
 				isValid = true
-				fields := xw.Audit()
 				fields["src_partner"] = partnerId
 				fields["trust"] = trust
 
@@ -424,6 +424,10 @@ func (s *WebconfigServer) CpeMiddleware(next http.Handler) http.Handler {
 			}
 		} else {
 			tokenErr = common.NewError(errors.New("CpeMiddleware() error no token"))
+		}
+
+		if tokenErr != nil {
+			fields["error"] = tokenErr
 		}
 
 		if isValid {
