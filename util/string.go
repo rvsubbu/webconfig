@@ -14,18 +14,26 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package util
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
-	"github.com/rdkcentral/webconfig/common"
 	"github.com/google/uuid"
+	"github.com/rdkcentral/webconfig/common"
+)
+
+const (
+	Comma              = ','
+	RightSquareBracket = ']'
+	RightCurlBracket   = '}'
+	baseProfileStr     = `{"profiles":[`
 )
 
 var (
@@ -122,4 +130,35 @@ func IsValidUTF8(bbytes []byte) bool {
 	str1 := string(bbytes)
 	str2 := strings.ToValidUTF8(str1, "#")
 	return str1 == str2
+}
+
+func AppendProfiles(pbytes, sbytes []byte) ([]byte, error) {
+	var builder strings.Builder
+	if len(pbytes) < 3 {
+		builder.WriteString(baseProfileStr)
+	} else {
+		s := strings.TrimSpace(string(pbytes))
+		builder.WriteString(s[:len(s)-2])
+	}
+	if len(sbytes) > 2 {
+		if len(pbytes) > 20 {
+			builder.WriteRune(',')
+		}
+		builder.Write(sbytes[1 : len(sbytes)-1])
+	}
+	builder.WriteRune(RightSquareBracket)
+	builder.WriteRune(RightCurlBracket)
+	return []byte(builder.String()), nil
+}
+
+func CompactJson(sbytes []byte) ([]byte, error) {
+	var itf interface{}
+	if err := json.Unmarshal(sbytes, &itf); err != nil {
+		return nil, common.NewError(err)
+	}
+	jsbytes, err := json.Marshal(itf)
+	if err != nil {
+		return nil, common.NewError(err)
+	}
+	return jsbytes, nil
 }

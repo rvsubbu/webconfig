@@ -98,6 +98,14 @@ func TestWebconfigServerSetterGetter(t *testing.T) {
 	server.SetValidPartners(validPartners)
 	assert.DeepEqual(t, server.ValidPartners(), validPartners)
 
+	// get profiles from upstream
+	enabled = true
+	server.SetUpstreamProfilesEnabled(enabled)
+	assert.Equal(t, server.UpstreamProfilesEnabled(), enabled)
+	enabled = false
+	server.SetUpstreamProfilesEnabled(enabled)
+	assert.Equal(t, server.UpstreamProfilesEnabled(), enabled)
+
 	// enforce strict query parameters validation
 	enabled = true
 	server.SetQueryParamsValidationEnabled(enabled)
@@ -105,6 +113,14 @@ func TestWebconfigServerSetterGetter(t *testing.T) {
 	enabled = false
 	server.SetQueryParamsValidationEnabled(enabled)
 	assert.Equal(t, server.QueryParamsValidationEnabled(), enabled)
+
+	//configure trust level
+	trust := 1000
+	server.SetMinTrust(trust)
+	assert.Equal(t, server.MinTrust(), trust)
+	trust = 500
+	server.SetMinTrust(trust)
+	assert.Equal(t, server.MinTrust(), trust)
 
 	validSubdocIdMap := map[string]int{
 		"red":    1,
@@ -115,11 +131,4 @@ func TestWebconfigServerSetterGetter(t *testing.T) {
 	server.SetValidSubdocIdMap(validSubdocIdMap)
 	assert.DeepEqual(t, validSubdocIdMap, server.ValidSubdocIdMap())
 
-	//configure trust level
-	trust := 1000
-	server.SetMinTrust(trust)
-	assert.Equal(t, server.MinTrust(), trust)
-	trust = 500
-	server.SetMinTrust(trust)
-	assert.Equal(t, server.MinTrust(), trust)
 }

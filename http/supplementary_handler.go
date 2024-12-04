@@ -29,6 +29,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	notFoundProfileText = `{"profiles":[]}`
+)
+
 func (s *WebconfigServer) MultipartSupplementaryHandler(w http.ResponseWriter, r *http.Request) {
 	// ==== data integrity check ====
 	params := mux.Vars(r)
@@ -50,17 +54,16 @@ func (s *WebconfigServer) MultipartSupplementaryHandler(w http.ResponseWriter, r
 	}
 
 	// append the extra query_params if any
+	var rootdoc *common.RootDocument
 	var queryParams string
-	if s.SupplementaryAppendingEnabled() {
-		rootdoc, err := s.GetRootDocument(mac)
+	var err error
+	if s.SupplementaryAppendingEnabled() || s.UpstreamProfilesEnabled() {
+		rootdoc, err = s.GetRootDocument(mac)
 		if err != nil {
 			if !s.IsDbNotFound(err) {
 				Error(w, http.StatusInternalServerError, common.NewError(err))
 				return
 			}
-		}
-		if rootdoc != nil {
-			queryParams = rootdoc.QueryParams
 		}
 	}
 
@@ -70,21 +73,73 @@ func (s *WebconfigServer) MultipartSupplementaryHandler(w http.ResponseWriter, r
 		partnerId = ""
 	}
 
+	if s.SupplementaryAppendingEnabled() && rootdoc != nil {
+		queryParams = rootdoc.QueryParams
+	}
+
 	urlSuffix := util.GetTelemetryQueryString(r.Header, mac, queryParams, partnerId)
 	fields["is_telemetry"] = true
 
-	rbytes, resHeader, err := s.GetProfiles(urlSuffix, fields)
+	baseProfileBytes, resHeader, err := s.GetProfiles(urlSuffix, fields)
+	xconfNotFound := false
 	if err != nil {
 		var rherr common.RemoteHttpError
 		if errors.As(err, &rherr) {
-			Error(w, rherr.StatusCode, rherr)
+			if rherr.StatusCode == http.StatusNotFound {
+				if s.UpstreamProfilesEnabled() {
+					xconfNotFound = true
+				} else {
+					Error(w, rherr.StatusCode, rherr)
+					return
+				}
+			} else {
+				Error(w, rherr.StatusCode, rherr)
+				return
+			}
+		}
+		if !xconfNotFound {
+			Error(w, http.StatusInternalServerError, common.NewError(err))
 			return
 		}
-		Error(w, http.StatusInternalServerError, common.NewError(err))
-		return
 	}
 
-	mpart, err := util.TelemetryBytesToMultipart(rbytes)
+	var profileBytes []byte
+	if s.UpstreamProfilesEnabled() && rootdoc != nil && len(rootdoc.QueryParams) > 0 {
+		// Get profiles from the second source
+		extraProfileBytes, _, err := s.GetUpstreamProfiles(mac, queryParams, r.Header, fields)
+		if err != nil {
+			exitNow := true
+			var rherr common.RemoteHttpError
+			if errors.As(err, &rherr) {
+				if rherr.StatusCode == http.StatusNotFound {
+					exitNow = false
+					extraProfileBytes = nil
+				} else {
+					Error(w, rherr.StatusCode, rherr)
+					return
+				}
+			}
+			if exitNow {
+				Error(w, http.StatusInternalServerError, common.NewError(err))
+				return
+			}
+		}
+
+		if xconfNotFound {
+			baseProfileBytes = []byte(notFoundProfileText)
+		}
+
+		// append profiles stored at webconfig
+		profileBytes, err = util.AppendProfiles(baseProfileBytes, extraProfileBytes)
+		if err != nil {
+			Error(w, http.StatusInternalServerError, err)
+			return
+		}
+	} else {
+		profileBytes = baseProfileBytes
+	}
+
+	mpart, err := util.TelemetryBytesToMultipart(profileBytes)
 	if err != nil {
 		Error(w, http.StatusInternalServerError, common.NewError(err))
 		return

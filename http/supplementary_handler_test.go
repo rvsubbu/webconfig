@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package http
 
 import (
@@ -889,4 +889,243 @@ func TestSupplementaryXconfReadAllErr(t *testing.T) {
 	assert.NilError(t, err)
 	res.Body.Close()
 	assert.Equal(t, res.StatusCode, http.StatusGatewayTimeout)
+}
+
+var (
+	mockUpstreamProfileResponse1 = []byte(`[
+  {
+    "name": "subname1",
+    "value": {
+      "Parameter": [
+        {
+          "reference": "Device.X_RDK_GatewayManagement.Gateway.1.MacAddress",
+          "reportEmpty": true,
+          "type": "dataModel"
+        }
+      ]
+    },
+    "versionHash": "977e16c4"
+  },
+  {
+    "name": "subname2",
+    "value": {
+      "Parameter": [
+        {
+          "reference": "Device.X_RDK_GatewayManagement.Gateway.2.MacAddress",
+          "reportEmpty": true,
+          "type": "dataModel"
+        }
+      ]
+    },
+    "versionHash": "4f207ebd"
+  }
+]`)
+)
+
+func TestSupplementaryUpstreamProfiles(t *testing.T) {
+	log.SetOutput(io.Discard)
+
+	server := NewWebconfigServer(sc, true)
+	router := server.GetRouter(true)
+
+	// ==== step 1 setup mock xconf server ====
+	cxbytes, err := util.CompactJson([]byte(mockProfileResponse))
+	assert.NilError(t, err)
+	mockServer := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write(cxbytes)
+		}))
+	defer mockServer.Close()
+	server.XconfConnector.SetXconfHost(mockServer.URL)
+
+	// ==== step 2 set up upstream mock server ====
+	cubytes, err := util.CompactJson(mockUpstreamProfileResponse1)
+	assert.NilError(t, err)
+	mockUpstreamServer := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write(cubytes)
+		}))
+	defer mockUpstreamServer.Close()
+	server.SetUpstreamHost(mockUpstreamServer.URL)
+	targetUpstreamHost := server.UpstreamHost()
+	assert.Equal(t, mockUpstreamServer.URL, targetUpstreamHost)
+
+	// ==== step 3 verify /config expect 200 with 1 mpart ====
+	cpeMac := util.GenerateRandomCpeMac()
+	configUrl := fmt.Sprintf("/api/v1/device/%v/config", cpeMac)
+	req, err := http.NewRequest("GET", configUrl, nil)
+	assert.NilError(t, err)
+
+	// add headers
+	modelName := "TG1682G"
+	partnerID := "comcast"
+	firmwareVersion := "TG1682_3.14p9s6_PROD_sey"
+
+	req.Header.Set(common.HeaderSupplementaryService, "telemetry")
+	req.Header.Set(common.HeaderProfileVersion, "2.0")
+	req.Header.Set(common.HeaderModelName, modelName)
+	req.Header.Set(common.HeaderPartnerID, partnerID)
+	req.Header.Set(common.HeaderAccountID, "1234567890")
+	req.Header.Set(common.HeaderFirmwareVersion, firmwareVersion)
+
+	res := ExecuteRequest(req, router).Result()
+	rbytes, err := io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusOK)
+
+	mparts, err := util.ParseMultipart(res.Header, rbytes)
+	assert.NilError(t, err)
+	assert.Equal(t, len(mparts), 1)
+	mpart, ok := mparts["telemetry"]
+	assert.Assert(t, ok)
+
+	output := common.TR181Output{}
+	err = msgpack.Unmarshal(mpart.Bytes, &output)
+	assert.NilError(t, err)
+	assert.Equal(t, len(output.Parameters), 1)
+	assert.Equal(t, output.Parameters[0].Name, common.TR181NameTelemetry)
+	assert.Equal(t, output.Parameters[0].DataType, common.TR181Blob)
+	mbytes := []byte(output.Parameters[0].Value)
+
+	var itf util.Dict
+	err = msgpack.Unmarshal(mbytes, &itf)
+	assert.NilError(t, err)
+
+	_, err = json.Marshal(&itf)
+	assert.NilError(t, err)
+
+	// assume only 1 "profile" is returned
+	profilesItf, ok := itf["profiles"]
+	assert.Assert(t, ok)
+	profilesJs, ok := profilesItf.([]interface{})
+	assert.Assert(t, ok)
+	assert.Assert(t, len(profilesJs) == 1)
+	profile1Itf := profilesJs[0]
+
+	profile1, ok := profile1Itf.(map[string]interface{})
+	assert.Assert(t, ok)
+	assert.Equal(t, profile1["name"].(string), "x_test_profile_001")
+
+	coreProfile1Itf, ok := profile1["value"]
+	assert.Assert(t, ok)
+	coreProfile1, ok := coreProfile1Itf.(map[string]interface{})
+	assert.Assert(t, ok)
+
+	var srcItf map[string]interface{}
+	err = json.Unmarshal([]byte(rawProfileStr), &srcItf)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, coreProfile1, srcItf)
+
+	// ==== step 4 enable the feature flag but no query_param expect 200 with 1 mpart ====
+	server.SetUpstreamProfilesEnabled(true)
+	defer server.SetUpstreamProfilesEnabled(false)
+
+	res = ExecuteRequest(req, router).Result()
+	rbytes, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	assert.Equal(t, res.StatusCode, http.StatusOK)
+
+	mparts, err = util.ParseMultipart(res.Header, rbytes)
+	assert.NilError(t, err)
+	assert.Equal(t, len(mparts), 1)
+	mpart, ok = mparts["telemetry"]
+	assert.Assert(t, ok)
+
+	output = *new(common.TR181Output)
+	err = msgpack.Unmarshal(mpart.Bytes, &output)
+	assert.NilError(t, err)
+	assert.Equal(t, len(output.Parameters), 1)
+	assert.Equal(t, output.Parameters[0].Name, common.TR181NameTelemetry)
+	assert.Equal(t, output.Parameters[0].DataType, common.TR181Blob)
+	mbytes = []byte(output.Parameters[0].Value)
+
+	itf = make(util.Dict)
+	err = msgpack.Unmarshal(mbytes, &itf)
+	assert.NilError(t, err)
+
+	_, err = json.Marshal(&itf)
+	assert.NilError(t, err)
+
+	// assume only 1 "profile" is returned
+	profilesItf, ok = itf["profiles"]
+	assert.Assert(t, ok)
+	profilesJs, ok = profilesItf.([]interface{})
+	assert.Assert(t, ok)
+	assert.Assert(t, len(profilesJs) == 1)
+	profile1Itf = profilesJs[0]
+	profile1, ok = profile1Itf.(map[string]interface{})
+	assert.Assert(t, ok)
+	assert.Equal(t, profile1["name"].(string), "x_test_profile_001")
+
+	coreProfile1Itf, ok = profile1["value"]
+	assert.Assert(t, ok)
+	coreProfile1, ok = coreProfile1Itf.(map[string]interface{})
+	assert.Assert(t, ok)
+
+	srcItf = make(map[string]interface{})
+	err = json.Unmarshal([]byte(rawProfileStr), &srcItf)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, coreProfile1, srcItf)
+
+	// ==== step 5 set query_param in the root_document expect 200 with 1 mpart ====
+	rdoc := new(common.RootDocument)
+	rdoc.QueryParams = "key1=val1"
+	rdoc.ModelName = modelName
+	rdoc.PartnerId = partnerID
+	rdoc.FirmwareVersion = firmwareVersion
+	err = server.SetRootDocument(cpeMac, rdoc)
+	assert.NilError(t, err)
+
+	res = ExecuteRequest(req, router).Result()
+	rbytes, err = io.ReadAll(res.Body)
+	assert.NilError(t, err)
+	res.Body.Close()
+	t.Logf("%s\n", rbytes)
+	assert.Equal(t, res.StatusCode, http.StatusOK)
+
+	mparts, err = util.ParseMultipart(res.Header, rbytes)
+	assert.NilError(t, err)
+	assert.Equal(t, len(mparts), 1)
+	mpart, ok = mparts["telemetry"]
+	assert.Assert(t, ok)
+
+	output = *new(common.TR181Output)
+	err = msgpack.Unmarshal(mpart.Bytes, &output)
+	assert.NilError(t, err)
+	assert.Equal(t, len(output.Parameters), 1)
+	assert.Equal(t, output.Parameters[0].Name, common.TR181NameTelemetry)
+	assert.Equal(t, output.Parameters[0].DataType, common.TR181Blob)
+	mbytes = []byte(output.Parameters[0].Value)
+
+	itf = make(util.Dict)
+	err = msgpack.Unmarshal(mbytes, &itf)
+	assert.NilError(t, err)
+
+	_, err = json.Marshal(&itf)
+	assert.NilError(t, err)
+
+	// assume only 1 "profile" is returned
+	profilesItf, ok = itf["profiles"]
+	assert.Assert(t, ok)
+	profilesJs, ok = profilesItf.([]interface{})
+	assert.Assert(t, ok)
+	assert.Assert(t, len(profilesJs) == 3)
+	profile1Itf = profilesJs[0]
+	profile1, ok = profile1Itf.(map[string]interface{})
+	assert.Assert(t, ok)
+	assert.Equal(t, profile1["name"].(string), "x_test_profile_001")
+
+	profile2Itf := profilesJs[1]
+	profile2, ok := profile2Itf.(map[string]interface{})
+	assert.Assert(t, ok)
+	assert.Equal(t, profile2["name"].(string), "subname1")
+
+	profile3Itf := profilesJs[2]
+	profile3, ok := profile3Itf.(map[string]interface{})
+	assert.Assert(t, ok)
+	assert.Equal(t, profile3["name"].(string), "subname2")
 }
