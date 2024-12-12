@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package common
 
 import (
@@ -27,8 +27,6 @@ var (
 	unloggedFields = []string{
 		"moneytrace",
 		"token",
-		"out_traceparent",
-		"out_tracestate",
 	}
 	coreFields = []string{
 		"app_name",

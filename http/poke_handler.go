@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package http
 
 import (
@@ -25,10 +25,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gorilla/mux"
 	"github.com/rdkcentral/webconfig/common"
 	"github.com/rdkcentral/webconfig/db"
 	"github.com/rdkcentral/webconfig/util"
-	"github.com/gorilla/mux"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -172,7 +172,7 @@ func (s *WebconfigServer) PokeHandler(w http.ResponseWriter, r *http.Request) {
 		span.End()
 	}()
 
-	transactionId, err := s.Poke(mac, token, pokeStr, fields)
+	transactionId, err := s.Poke(r.Header, mac, token, pokeStr, fields)
 
 	if err != nil {
 		var rherr common.RemoteHttpError

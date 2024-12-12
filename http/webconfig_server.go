@@ -712,9 +712,9 @@ func (s *WebconfigServer) ValidatePartner(parsedPartner string) error {
 	return fmt.Errorf("invalid partner")
 }
 
-func (c *WebconfigServer) Poke(cpeMac string, token string, pokeStr string, fields log.Fields) (string, error) {
+func (c *WebconfigServer) Poke(rHeader http.Header, cpeMac string, token string, pokeStr string, fields log.Fields) (string, error) {
 	body := fmt.Sprintf(common.PokeBodyTemplate, pokeStr)
-	transactionId, err := c.Patch(cpeMac, token, []byte(body), fields)
+	transactionId, err := c.Patch(rHeader, cpeMac, token, []byte(body), fields)
 	if err != nil {
 		return "", common.NewError(err)
 	}
@@ -742,7 +742,7 @@ func (s *WebconfigServer) logRequestStarts(w http.ResponseWriter, r *http.Reques
 		token = elements[1]
 	}
 
-	var xmTraceId, traceId, outTraceparent, outTracestate string
+	var xmTraceId, traceId string
 
 	// extract moneytrace from the header
 	tracePart := strings.Split(r.Header.Get("X-Moneytrace"), ";")[0]
@@ -756,14 +756,11 @@ func (s *WebconfigServer) logRequestStarts(w http.ResponseWriter, r *http.Reques
 	traceparent := r.Header.Get(common.HeaderTraceparent)
 	if len(traceparent) == 55 {
 		traceId = traceparent[3:35]
-		outTraceparent = traceparent[:36] + s.TraceparentParentID() + traceparent[52:55]
 	}
 
 	// extract tracestate from the header
 	tracestate := r.Header.Get(common.HeaderTracestate)
-	if len(tracestate) > 0 {
-		outTracestate = fmt.Sprintf("%v,%v=%v", tracestate, s.TracestateVendorID(), s.TraceparentParentID())
-	}
+
 	// extract auditid from the header
 	auditId := r.Header.Get("X-Auditid")
 	if len(auditId) == 0 {
@@ -771,17 +768,17 @@ func (s *WebconfigServer) logRequestStarts(w http.ResponseWriter, r *http.Reques
 	}
 	headerMap := util.HeaderToMap(header)
 	fields := log.Fields{
-		"path":            r.URL.String(),
-		"method":          r.Method,
-		"audit_id":        auditId,
-		"remote_ip":       remoteIp,
-		"host_name":       host,
-		"header":          headerMap,
-		"logger":          "request",
-		"trace_id":        traceId,
-		"app_name":        s.AppName(),
-		"out_traceparent": outTraceparent,
-		"out_tracestate":  outTracestate,
+		"path":        r.URL.String(),
+		"method":      r.Method,
+		"audit_id":    auditId,
+		"remote_ip":   remoteIp,
+		"host_name":   host,
+		"header":      headerMap,
+		"logger":      "request",
+		"trace_id":    traceId,
+		"app_name":    s.AppName(),
+		"traceparent": traceparent,
+		"tracestate":  tracestate,
 	}
 
 	userAgent := r.UserAgent()
@@ -992,7 +989,7 @@ func (s *WebconfigServer) spanMiddleware(next http.Handler) http.Handler {
 			traceFlags := trace.TraceFlags(hexStringToBytes(traceFlagsStr)[0])
 			sc = sc.WithTraceFlags(traceFlags)
 		}
-		tracestateStr := s.getTracestate(r)
+		tracestateStr := r.Header.Get(common.HeaderTracestate)
 		if tracestateStr != "" {
 			tracestate, _ := trace.ParseTraceState(tracestateStr)
 			sc = sc.WithTraceState(tracestate)
@@ -1015,16 +1012,6 @@ func (s *WebconfigServer) parseTraceparent(r *http.Request) (traceID string, tra
 		traceFlags = inTraceparent[53:55]
 	}
 	return
-}
-
-// extract tracestate from the header
-func (s *WebconfigServer) getTracestate(r *http.Request) string {
-	inTracestate := r.Header.Get(common.HeaderTracestate)
-	var outTracestate string
-	if len(inTracestate) > 0 {
-		outTracestate = fmt.Sprintf("%v,%v=%v", inTracestate, s.TracestateVendorID(), s.TraceparentParentID())
-	}
-	return outTracestate
 }
 
 func (s *WebconfigServer) newParentPokeSpan(ctx context.Context, r *http.Request) (context.Context, trace.Span) {
