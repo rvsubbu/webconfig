@@ -168,16 +168,6 @@ func (c *WebpaConnector) SetApiVersion(apiVersion string) {
 	c.apiVersion = apiVersion
 }
 
-func (c *WebpaConnector) PokeSpanTemplate() string {
-	// By convention, span name won't have the host, but only the base template
-	return fmt.Sprintf(webpaUrlTemplate[2:], c.apiVersion, "{mac}")
-}
-
-// Base URL with the cpemac populated
-func (c *WebpaConnector) PokeSpanPath(mac string) string {
-	return fmt.Sprintf(webpaUrlTemplate[2:], c.apiVersion, mac)
-}
-
 func (c *WebpaConnector) NewQueue(capacity int) error {
 	if c.queue != nil {
 		err := fmt.Errorf("queue is already initialized")
