@@ -19,6 +19,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
@@ -37,6 +38,7 @@ import (
 	"github.com/rdkcentral/webconfig/common"
 	"github.com/rdkcentral/webconfig/util"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 const (
@@ -107,7 +109,7 @@ func NewHttpClient(conf *configuration.Config, serviceName string, tlsConfig *tl
 	}
 }
 
-func (c *HttpClient) Do(method string, url string, header http.Header, bbytes []byte, auditFields log.Fields, loggerName string, retry int) ([]byte, http.Header, bool, error) {
+func (c *HttpClient) Do(ctx context.Context, method string, url string, header http.Header, bbytes []byte, auditFields log.Fields, loggerName string, retry int) ([]byte, http.Header, bool, error) {
 	fields := common.FilterLogFields(auditFields)
 
 	// verify a response is received
@@ -206,6 +208,8 @@ func (c *HttpClient) Do(method string, url string, header http.Header, bbytes []
 	startTime := time.Now()
 
 	// the core http call
+	propagator := propagation.TraceContext{}
+	propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 	res, err := c.Client.Do(req)
 	// err should be *url.Error
 
@@ -354,7 +358,7 @@ func (c *HttpClient) Do(method string, url string, header http.Header, bbytes []
 	return rbytes, res.Header, false, nil
 }
 
-func (c *HttpClient) DoWithRetries(method string, url string, rHeader http.Header, bbytes []byte, fields log.Fields, loggerName string) ([]byte, http.Header, error) {
+func (c *HttpClient) DoWithRetries(ctx context.Context, method string, url string, rHeader http.Header, bbytes []byte, fields log.Fields, loggerName string) ([]byte, http.Header, error) {
 	var respBytes []byte
 	var respHeader http.Header
 	var err error
@@ -368,7 +372,7 @@ func (c *HttpClient) DoWithRetries(method string, url string, rHeader http.Heade
 		if i > 0 {
 			time.Sleep(time.Duration(c.retryInMsecs) * time.Millisecond)
 		}
-		respBytes, respHeader, cont, err = c.Do(method, url, rHeader, cbytes, fields, loggerName, i)
+		respBytes, respHeader, cont, err = c.Do(ctx, method, url, rHeader, cbytes, fields, loggerName, i)
 		if !cont {
 			break
 		}

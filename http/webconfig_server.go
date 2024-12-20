@@ -32,11 +32,6 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/IBM/sarama"
 	"github.com/go-akka/configuration"
 	"github.com/google/uuid"
@@ -116,7 +111,6 @@ type WebconfigServer struct {
 	tracestateVendorID            string
 	supplementaryAppendingEnabled bool
 	otelTracer                    *otelTracing // For OpenTelemetry Tracing
-	webpaPokeSpanTemplate         string
 	kafkaProducerEnabled          bool
 	kafkaProducerTopic            string
 	upstreamProfilesEnabled       bool
@@ -339,8 +333,6 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		minTrust:                      minTrust,
 		validSubdocIdMap:              validSubdocIdMap,
 	}
-	// Init the child poke span name
-	ws.webpaPokeSpanTemplate = ws.WebpaConnector.PokeSpanTemplate()
 
 	return ws
 }
@@ -712,9 +704,9 @@ func (s *WebconfigServer) ValidatePartner(parsedPartner string) error {
 	return fmt.Errorf("invalid partner")
 }
 
-func (c *WebconfigServer) Poke(rHeader http.Header, cpeMac string, token string, pokeStr string, fields log.Fields) (string, error) {
+func (c *WebconfigServer) Poke(ctx context.Context, rHeader http.Header, cpeMac string, token string, pokeStr string, fields log.Fields) (string, error) {
 	body := fmt.Sprintf(common.PokeBodyTemplate, pokeStr)
-	transactionId, err := c.Patch(rHeader, cpeMac, token, []byte(body), fields)
+	transactionId, err := c.Patch(ctx, rHeader, cpeMac, token, []byte(body), fields)
 	if err != nil {
 		return "", common.NewError(err)
 	}
@@ -973,37 +965,6 @@ func GetResponseLogObjs(rbytes []byte) (interface{}, string) {
 	return itf, ""
 }
 
-func (s *WebconfigServer) spanMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		spanContext := trace.SpanContextFromContext(ctx)
-		remote := spanContext.IsRemote()
-		sc := trace.SpanContext{}.WithRemote(remote)
-
-		traceIDStr, traceFlagsStr := s.parseTraceparent(r)
-		if traceIDStr != "" {
-			traceID, _ := trace.TraceIDFromHex(traceIDStr)
-			sc = sc.WithTraceID(traceID)
-		}
-		if traceFlagsStr != "" {
-			traceFlags := trace.TraceFlags(hexStringToBytes(traceFlagsStr)[0])
-			sc = sc.WithTraceFlags(traceFlags)
-		}
-		tracestateStr := r.Header.Get(common.HeaderTracestate)
-		if tracestateStr != "" {
-			tracestate, _ := trace.ParseTraceState(tracestateStr)
-			sc = sc.WithTraceState(tracestate)
-		}
-		ctx = trace.ContextWithSpanContext(ctx, sc)
-
-		ctx, span := s.newParentPokeSpan(ctx, r)
-		defer endSpan(span, w)
-
-		// Pass the context with the span to the next handler
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
 // extract traceparent from the header
 func (s *WebconfigServer) parseTraceparent(r *http.Request) (traceID string, traceFlags string) {
 	inTraceparent := r.Header.Get(common.HeaderTraceparent)
@@ -1012,64 +973,6 @@ func (s *WebconfigServer) parseTraceparent(r *http.Request) (traceID string, tra
 		traceFlags = inTraceparent[53:55]
 	}
 	return
-}
-
-func (s *WebconfigServer) newParentPokeSpan(ctx context.Context, r *http.Request) (context.Context, trace.Span) {
-	var span trace.Span
-
-	ctx, span = otelTracer.tracer.Start(ctx, otelTracer.opName)
-	// ctx, span = otelTracer.tracer.Start(ctx, otelTracer.opName, trace.WithSpanKind(trace.SpanKindServer))
-
-	// Feedback: Better to use the "path"/API rather than a hard coded name
-	route := "oswebconfig_poke_handler"
-	if mux.CurrentRoute(r) != nil { // This can be nil in unit tests
-		route, _ = mux.CurrentRoute(r).GetPathTemplate()
-	}
-	s.addAttributes(span, route, r.URL.Path, r.URL.String(), r.Method)
-	return ctx, span
-}
-
-func (s *WebconfigServer) newChildPokeSpan(ctx context.Context, route string, path string, fullPath string, method string) (context.Context, trace.Span) {
-	var span trace.Span
-	ctx, span = otelTracer.tracer.Start(ctx, otelTracer.opName)
-	// ctx, span = otelTracer.tracer.Start(ctx, otelTracer.opName, trace.WithSpanKind(trace.SpanKindClient))
-
-	s.addAttributes(span, route, path, fullPath, method)
-	return ctx, span
-}
-
-func (s *WebconfigServer) addAttributes(span trace.Span, route string, path string, fullPath string, method string) {
-	span.SetAttributes(
-		attribute.String("env", otelTracer.envName),
-		attribute.String("operation.name", otelTracer.opName),
-		attribute.String("http.url_details.path", path),
-		semconv.HTTPMethodKey.String(method),
-		semconv.HTTPRouteKey.String(route),
-		semconv.HTTPURLKey.String(fullPath),
-	)
-
-	log.Debug(fmt.Sprintf("added span attribute key=env, value=%s", otelTracer.envName))
-	log.Debug(fmt.Sprintf("added span attribute key=operation.name, value=%s", otelTracer.opName))
-	log.Debug(fmt.Sprintf("added span attribute key=http.url_details.path, value=%s", path))
-	log.Debug(fmt.Sprintf("added span attribute key=http.method, value=%s", method))
-	log.Debug(fmt.Sprintf("added span attribute key=http.route, value=%s", route))
-	log.Debug(fmt.Sprintf("added span attribute key=http.url, value=%s", fullPath))
-}
-
-func endSpan(span trace.Span, w http.ResponseWriter) {
-	if xw, ok := w.(*XResponseWriter); ok {
-		statusCode := xw.Status()
-		statusAttr := attribute.Int("http.status_code", statusCode)
-		span.SetAttributes(statusAttr)
-		log.Debug(fmt.Sprintf("added span attribute key=http.status_code, value=%d", statusCode))
-		if statusCode >= http.StatusInternalServerError {
-			statusText := http.StatusText(statusCode)
-			span.SetStatus(codes.Error, statusText)
-			span.SetAttributes(attribute.String("http.response.error", statusText))
-			log.Debug(fmt.Sprintf("added span attribute key=http.response.error, value=%s", statusText))
-		}
-	}
-	span.End()
 }
 
 func hexStringToBytes(hexString string) []byte {
