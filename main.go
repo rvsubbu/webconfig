@@ -61,6 +61,7 @@ func main() {
 		panic(err)
 	}
 	server := wchttp.NewWebconfigServer(sc, false)
+	defer server.OtelShutdown()
 
 	// setup logging
 	logFile := server.GetString("webconfig.log.file")
