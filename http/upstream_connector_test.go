@@ -14,10 +14,11 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package http
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -51,6 +52,7 @@ func TestUpstreamConnector(t *testing.T) {
 	bbytes := []byte("hello world")
 	var err error
 	fields := log.Fields{}
-	_, _, err = server.PostUpstream(mac, header, bbytes, fields)
+	ctx := context.Background()
+	_, _, err = server.PostUpstream(ctx, mac, header, bbytes, fields)
 	assert.NilError(t, err)
 }

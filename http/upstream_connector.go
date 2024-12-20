@@ -18,6 +18,7 @@
 package http
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
@@ -72,7 +73,7 @@ func (c *UpstreamConnector) ServiceName() string {
 	return c.serviceName
 }
 
-func (c *UpstreamConnector) PostUpstream(mac string, header http.Header, bbytes []byte, fields log.Fields) ([]byte, http.Header, error) {
+func (c *UpstreamConnector) PostUpstream(ctx context.Context, mac string, header http.Header, bbytes []byte, fields log.Fields) ([]byte, http.Header, error) {
 	url := c.UpstreamHost() + fmt.Sprintf(c.upstreamUrlTemplate, mac)
 
 	if itf, ok := fields["audit_id"]; ok {
@@ -89,14 +90,14 @@ func (c *UpstreamConnector) PostUpstream(mac string, header http.Header, bbytes 
 		}
 	}
 
-	rbytes, header, err := c.DoWithRetries("POST", url, header, bbytes, fields, c.ServiceName())
+	rbytes, header, err := c.DoWithRetries(ctx, "POST", url, header, bbytes, fields, c.ServiceName())
 	if err != nil {
 		return rbytes, header, owcommon.NewError(err)
 	}
 	return rbytes, header, nil
 }
 
-func (c *UpstreamConnector) GetUpstreamProfiles(mac, queryParams string, header http.Header, fields log.Fields) ([]byte, http.Header, error) {
+func (c *UpstreamConnector) GetUpstreamProfiles(ctx context.Context, mac, queryParams string, header http.Header, fields log.Fields) ([]byte, http.Header, error) {
 	url := c.UpstreamHost() + fmt.Sprintf(c.profileUrlTemplate, mac, queryParams)
 
 	if itf, ok := fields["audit_id"]; ok {
@@ -113,7 +114,7 @@ func (c *UpstreamConnector) GetUpstreamProfiles(mac, queryParams string, header 
 		}
 	}
 
-	rbytes, header, err := c.DoWithRetries("GET", url, header, nil, fields, c.ServiceName())
+	rbytes, header, err := c.DoWithRetries(ctx, "GET", url, header, nil, fields, c.ServiceName())
 	if err != nil {
 		return rbytes, header, owcommon.NewError(err)
 	}
