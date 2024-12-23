@@ -30,11 +30,18 @@ import (
 	"github.com/rdkcentral/webconfig/db"
 	"github.com/rdkcentral/webconfig/util"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
+const moracideTag = "X-Cl-Experiment"
+
 func (s *WebconfigServer) PokeHandler(w http.ResponseWriter, r *http.Request) {
+	moracideTagVal := r.Header.Get(moracideTag)
+	if moracideTagVal == "" {
+		moracideTagVal = "false"
+	}
 	// tracing propagation
 	ctx := r.Context()
 
@@ -42,6 +49,7 @@ func (s *WebconfigServer) PokeHandler(w http.ResponseWriter, r *http.Request) {
 	ctx = propagator.Extract(ctx, propagation.HeaderCarrier(r.Header))
 	span := trace.SpanFromContext(ctx)
 	defer span.End()
+	span.SetAttributes(attribute.String(moracideTag, moracideTagVal))
 	tracer := otel.Tracer(s.otelTracer.appName)
 	ctx, childSpan := tracer.Start(ctx, s.otelTracer.opName)
 	defer childSpan.End()
