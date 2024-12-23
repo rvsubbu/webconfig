@@ -21,7 +21,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -963,21 +962,6 @@ func GetResponseLogObjs(rbytes []byte) (interface{}, string) {
 		return BadJsonResponseMap, string(rbytes)
 	}
 	return itf, ""
-}
-
-// extract traceparent from the header
-func (s *WebconfigServer) parseTraceparent(r *http.Request) (traceID string, traceFlags string) {
-	inTraceparent := r.Header.Get(common.HeaderTraceparent)
-	if len(inTraceparent) == 55 {
-		traceID = inTraceparent[3:35]
-		traceFlags = inTraceparent[53:55]
-	}
-	return
-}
-
-func hexStringToBytes(hexString string) []byte {
-	bytes, _ := hex.DecodeString(hexString)
-	return bytes
 }
 
 func (s *WebconfigServer) ForwardKafkaMessage(kbytes []byte, m *common.EventMessage, fields log.Fields) {
