@@ -34,6 +34,8 @@ const (
 )
 
 func (s *WebconfigServer) MultipartSupplementaryHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	// ==== data integrity check ====
 	params := mux.Vars(r)
 	mac, ok := params["mac"]
@@ -80,7 +82,7 @@ func (s *WebconfigServer) MultipartSupplementaryHandler(w http.ResponseWriter, r
 	urlSuffix := util.GetTelemetryQueryString(r.Header, mac, queryParams, partnerId)
 	fields["is_telemetry"] = true
 
-	baseProfileBytes, resHeader, err := s.GetProfiles(urlSuffix, fields)
+	baseProfileBytes, resHeader, err := s.GetProfiles(ctx, urlSuffix, fields)
 	xconfNotFound := false
 	if err != nil {
 		var rherr common.RemoteHttpError
@@ -106,7 +108,7 @@ func (s *WebconfigServer) MultipartSupplementaryHandler(w http.ResponseWriter, r
 	var profileBytes []byte
 	if s.UpstreamProfilesEnabled() && rootdoc != nil && len(rootdoc.QueryParams) > 0 {
 		// Get profiles from the second source
-		extraProfileBytes, _, err := s.GetUpstreamProfiles(mac, queryParams, r.Header, fields)
+		extraProfileBytes, _, err := s.GetUpstreamProfiles(ctx, mac, queryParams, r.Header, fields)
 		if err != nil {
 			exitNow := true
 			var rherr common.RemoteHttpError
