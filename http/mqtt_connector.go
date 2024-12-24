@@ -14,18 +14,19 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package http
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
 	"time"
 
-	"github.com/rdkcentral/webconfig/common"
 	"github.com/go-akka/configuration"
 	"github.com/google/uuid"
+	"github.com/rdkcentral/webconfig/common"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -64,7 +65,7 @@ func (c *MqttConnector) ServiceName() string {
 	return c.serviceName
 }
 
-func (c *MqttConnector) PostMqtt(cpeMac string, bbytes []byte, fields log.Fields) ([]byte, error) {
+func (c *MqttConnector) PostMqtt(ctx context.Context, cpeMac string, bbytes []byte, fields log.Fields) ([]byte, error) {
 	url := fmt.Sprintf(mqttUrlTemplate, c.MqttHost(), cpeMac)
 
 	var traceId, xmTraceId, outTraceparent, outTracestate string
@@ -94,7 +95,7 @@ func (c *MqttConnector) PostMqtt(cpeMac string, bbytes []byte, fields log.Fields
 	header.Set(common.HeaderTraceparent, outTraceparent)
 	header.Set(common.HeaderTracestate, outTracestate)
 
-	rbytes, _, err := c.DoWithRetries("POST", url, header, bbytes, fields, c.ServiceName())
+	rbytes, _, err := c.DoWithRetries(ctx, "POST", url, header, bbytes, fields, c.ServiceName())
 	if err != nil {
 		return rbytes, common.NewError(err)
 	}

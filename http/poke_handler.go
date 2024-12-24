@@ -14,7 +14,7 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package http
 
 import (
@@ -25,14 +25,36 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gorilla/mux"
 	"github.com/rdkcentral/webconfig/common"
 	"github.com/rdkcentral/webconfig/db"
 	"github.com/rdkcentral/webconfig/util"
-	"github.com/gorilla/mux"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
+const moracideTag = "X-Cl-Experiment"
+
 func (s *WebconfigServer) PokeHandler(w http.ResponseWriter, r *http.Request) {
+	moracideTagVal := r.Header.Get(moracideTag)
+	if moracideTagVal == "" {
+		moracideTagVal = "false"
+	}
+	// tracing propagation
+	ctx := r.Context()
+
+	propagator := propagation.TraceContext{}
+	ctx = propagator.Extract(ctx, propagation.HeaderCarrier(r.Header))
+	span := trace.SpanFromContext(ctx)
+	defer span.End()
+	span.SetAttributes(attribute.String(moracideTag, moracideTagVal))
+	tracer := otel.Tracer(s.otelTracer.appName)
+	ctx, childSpan := tracer.Start(ctx, s.otelTracer.opName)
+	defer childSpan.End()
+
+	// handler
 	params := mux.Vars(r)
 	mac := params["mac"]
 	mac = strings.ToUpper(mac)
@@ -104,7 +126,7 @@ func (s *WebconfigServer) PokeHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			_, err = s.PostMqtt(deviceId, mbytes, fields)
+			_, err = s.PostMqtt(ctx, deviceId, mbytes, fields)
 			if err != nil {
 				var rherr common.RemoteHttpError
 				if errors.As(err, &rherr) {
@@ -157,28 +179,12 @@ func (s *WebconfigServer) PokeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	statusCode := http.StatusOK
-	pokeSpanPath := s.WebpaConnector.PokeSpanPath(mac)
-	// We are not passing any qparams to webpa, so fullPath = path
-	fullPath := pokeSpanPath
-	_, span := s.newChildPokeSpan(r.Context(), s.webpaPokeSpanTemplate, pokeSpanPath, fullPath, "PATCH")
-
-	// endSpan should reflect the real status of the webpa patch call
-	// not the transformed custom status
-	// e.g 404 from webpa patch is converted to 521, but we want to show 404
-	defer func() {
-		statusAttr := attribute.Int("http.status_code", statusCode)
-		span.SetAttributes(statusAttr)
-		span.End()
-	}()
-
-	transactionId, err := s.Poke(mac, token, pokeStr, fields)
+	transactionId, err := s.Poke(ctx, r.Header, mac, token, pokeStr, fields)
 
 	if err != nil {
 		var rherr common.RemoteHttpError
 		if errors.As(err, &rherr) {
 			// webpa error handling
-			statusCode = rherr.StatusCode
 			status := rherr.StatusCode
 			if rherr.StatusCode == http.StatusNotFound {
 				status = 521
@@ -204,7 +210,6 @@ func (s *WebconfigServer) PokeHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		statusCode = http.StatusInternalServerError
 		Error(w, http.StatusInternalServerError, common.NewError(err))
 		return
 	}

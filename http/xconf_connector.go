@@ -14,16 +14,17 @@
 * limitations under the License.
 *
 * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 package http
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
 
-	owcommon "github.com/rdkcentral/webconfig/common"
 	"github.com/go-akka/configuration"
+	owcommon "github.com/rdkcentral/webconfig/common"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -62,9 +63,9 @@ func (c *XconfConnector) ServiceName() string {
 	return c.serviceName
 }
 
-func (c *XconfConnector) GetProfiles(urlSuffix string, fields log.Fields) ([]byte, http.Header, error) {
+func (c *XconfConnector) GetProfiles(ctx context.Context, urlSuffix string, fields log.Fields) ([]byte, http.Header, error) {
 	url := fmt.Sprintf(xconfUrlTemplate, c.XconfHost(), urlSuffix)
-	rbytes, resHeader, err := c.DoWithRetries("GET", url, nil, nil, fields, c.ServiceName())
+	rbytes, resHeader, err := c.DoWithRetries(ctx, "GET", url, nil, nil, fields, c.ServiceName())
 	if err != nil {
 		return rbytes, resHeader, owcommon.NewError(err)
 	}
