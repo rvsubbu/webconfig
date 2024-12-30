@@ -37,21 +37,13 @@ type XpcTracer struct {
 	otelTracerProvider oteltrace.TracerProvider
 	otelPropagator     otelpropagation.TextMapPropagator
 	otelTracer         oteltrace.Tracer
-
-	// internal vars for homegrown trace generation/modification
-	appID                     string // used in the homegrown traceparent,tracestate header generation
-	homegrownTracePropagation bool // Use homegrown algorithm for traceparent, tracestate modification
-	homegrownTraceGeneration  bool // Generate traceparent etc. using homegrown algorithm if not present in incoming req
 }
 
 var xpcTracer XpcTracer // global tracer
 
 func NewXpcTracer(conf *configuration.Config) *XpcTracer {
 	initAppData(conf)
-	initHomegrownTracing(conf)
-
 	otelInit(conf)
-
 	xpcTracer.MoracideTagPrefix = conf.GetString("webconfig.tracing.moracide_tag_prefix", defaultMoracideTagPrefix)
 	return &xpcTracer
 }
@@ -85,13 +77,6 @@ func initAppData(conf *configuration.Config) {
 		xpcTracer.appEnv = "prod"
 	}
 	xpcTracer.rgn = os.Getenv("SITE_REGION")
-}
-
-func initHomegrownTracing(conf *configuration.Config) {
-	// TODO: Marshal these tracing params from config, ok to temporarily read each separately
-	xpcTracer.appID = conf.GetString("webconfig.tracing.homegrown_algorithm.app_id", defaultAppID)
-	xpcTracer.homegrownTracePropagation = conf.GetBoolean("webconfig.tracing.homegrown_algorithm.xpc_trace_propagation")
-	xpcTracer.homegrownTraceGeneration = conf.GetBoolean("webconfig.tracing.homegrown_algorithm.xpc_trace_generation")
 }
 
 func GetServiceName() string {

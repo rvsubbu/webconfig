@@ -42,8 +42,7 @@ type XpcTrace struct {
 	// Order of priority; use the value extracted from otel span;
 	// if no otel span as well, use the value in req headers (Note: this will create islands as both
 	// the app and its children will have the same tracestate
-	// If homegrown span modification is enabled in config, use it as a last resort. Otherwise, nothing
-	// will be passed to the child http calls, creating islands
+	// Otherwise, nothing will be passed to the child http calls, creating islands
 	// If any source is found, then it will be propagated to all child http calls
 	// TODO; also add this to Kafka headers, SNS message attributes
 	otelTraceparent  string
@@ -66,7 +65,6 @@ type XpcTrace struct {
 }
 
 // NewXpcTrace extracts traceparent, tracestate, moracideTags from otel spans or reqs
-// It can also generate traceparent/state using homegrown algorithms, but avoid this as a rule
 func NewXpcTrace(r *http.Request) * XpcTrace {
 	var xpcTrace XpcTrace
 	xpcTrace.ReqMoracideTags = make(map[string]string)
@@ -75,13 +73,6 @@ func NewXpcTrace(r *http.Request) * XpcTrace {
 
 	if xpcTracer.OtelEnabled {
 		otelExtractParamsFromSpan(r.Context(), &xpcTrace)
-	}
-
-	if xpcTrace.OutTraceparent == "" {
-		// No traceparent in otel spans i.e. no otel spans
-		// No traceparent in incoming req either
-		// Note: If otel root span, ts can be empty, but tp can be set, so cannot check for ts being empty
-		tryHomegrownTpTs(r, &xpcTrace)
 	}
 
 	return &xpcTrace
