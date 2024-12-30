@@ -40,6 +40,7 @@ import (
 	"github.com/rdkcentral/webconfig/db/cassandra"
 	"github.com/rdkcentral/webconfig/db/sqlite"
 	"github.com/rdkcentral/webconfig/security"
+	"github.com/rdkcentral/webconfig/tracing"
 	"github.com/rdkcentral/webconfig/util"
 	log "github.com/sirupsen/logrus"
 )
@@ -93,6 +94,7 @@ type WebconfigServer struct {
 	*MqttConnector
 	*UpstreamConnector
 	sarama.AsyncProducer
+	*tracing.XpcTracer
 	tlsConfig                     *tls.Config
 	notLoggedHeaders              []string
 	metricsEnabled                bool
@@ -109,7 +111,6 @@ type WebconfigServer struct {
 	traceparentParentID           string
 	tracestateVendorID            string
 	supplementaryAppendingEnabled bool
-	otelTracer                    *otelTracing // For OpenTelemetry Tracing
 	kafkaProducerEnabled          bool
 	kafkaProducerTopic            string
 	upstreamProfilesEnabled       bool
@@ -254,13 +255,7 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		validPartners = append(validPartners, strings.ToLower(p))
 	}
 
-	traceparentParentID := conf.GetString("webconfig.traceparent_parent_id", defaultTraceparentParentID)
-	tracestateVendorID := conf.GetString("webconfig.tracestate_vendor_id", defaultTracestateVendorID)
-	otelTracer, err := newOtel(conf)
-	if err != nil {
-		// Just log err and continue
-		log.Error("Could not initialize open telemetry for tracing, but continuing")
-	}
+	xpcTracer := tracing.NewXpcTracer(conf)
 
 	supplementaryAppendingEnabled := conf.GetBoolean("webconfig.supplementary_appending_enabled", defaultSupplementaryAppendingEnabled)
 
@@ -321,9 +316,6 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		validateMacEnabled:            validateMacEnabled,
 		validPartners:                 validPartners,
 		jwksEnabled:                   jwksEnabled,
-		traceparentParentID:           traceparentParentID,
-		tracestateVendorID:            tracestateVendorID,
-		otelTracer:                    otelTracer,
 		supplementaryAppendingEnabled: supplementaryAppendingEnabled,
 		kafkaProducerEnabled:          kafkaProducerEnabled,
 		kafkaProducerTopic:            kafkaProducerTopic,
@@ -331,9 +323,14 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 		queryParamsValidationEnabled:  queryParamsValidationEnabled,
 		minTrust:                      minTrust,
 		validSubdocIdMap:              validSubdocIdMap,
+		XpcTracer:                     xpcTracer,
 	}
 
 	return ws
+}
+
+func (s *WebconfigServer) Stop() {
+	tracing.StopXpcTracer()
 }
 
 func (s *WebconfigServer) TestingMiddleware(next http.Handler) http.Handler {
@@ -749,27 +746,34 @@ func (s *WebconfigServer) logRequestStarts(w http.ResponseWriter, r *http.Reques
 		traceId = traceparent[3:35]
 	}
 
-	// extract tracestate from the header
-	tracestate := r.Header.Get(common.HeaderTracestate)
-
 	// extract auditid from the header
 	auditId := r.Header.Get("X-Auditid")
 	if len(auditId) == 0 {
 		auditId = util.GetAuditId()
 	}
+
+	// traceparent handling for E2E tracing
+	xpcTrace := tracing.NewXpcTrace(r)
+
 	headerMap := util.HeaderToMap(header)
 	fields := log.Fields{
-		"path":        r.URL.String(),
-		"method":      r.Method,
-		"audit_id":    auditId,
-		"remote_ip":   remoteIp,
-		"host_name":   host,
-		"header":      headerMap,
-		"logger":      "request",
-		"trace_id":    traceId,
-		"app_name":    s.AppName(),
-		"traceparent": traceparent,
-		"tracestate":  tracestate,
+		"path":            r.URL.String(),
+		"method":          r.Method,
+		"audit_id":        auditId,
+		"remote_ip":       remoteIp,
+		"host_name":       host,
+		"header":          headerMap,
+		"logger":          "request",
+		"trace_id":        traceId,
+		"app_name":        s.AppName(),
+		"traceparent":     xpcTrace.ReqTraceparent,
+		"tracestate":      xpcTrace.ReqTracestate,
+		"out_traceparent": xpcTrace.OutTraceparent,
+		"out_tracestate":  xpcTrace.OutTracestate,
+		"xpc_trace":       xpcTrace,
+	}
+	for key, val := range xpcTrace.ReqMoracideTags {
+		fields["req_"+key] = val
 	}
 
 	userAgent := r.UserAgent()
@@ -828,6 +832,7 @@ func (s *WebconfigServer) logRequestStarts(w http.ResponseWriter, r *http.Reques
 		log.WithFields(tfields).Info("request starts")
 	}
 
+	xwriter.LogDebug(r, "tracing", fmt.Sprintf("Trace final out_traceparent %s out_traceState %s", xpcTrace.OutTraceparent, xpcTrace.OutTracestate))
 	return xwriter
 }
 
@@ -896,6 +901,9 @@ func (s *WebconfigServer) logRequestEnds(xw *XResponseWriter, r *http.Request) {
 	fields["status"] = xw.Status()
 	fields["duration"] = duration
 	fields["logger"] = "request"
+
+	tracing.SetSpanStatusCode(fields)
+	tracing.SetSpanMoracideTags(fields)
 
 	var userAgent string
 	if itf, ok := fields["user_agent"]; ok {

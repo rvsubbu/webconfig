@@ -21,8 +21,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/rdkcentral/webconfig/common"
+	"github.com/rdkcentral/webconfig/tracing"
 )
 
 const (
@@ -54,6 +57,7 @@ func WriteByMarshal(w http.ResponseWriter, status int, o interface{}) {
 		return
 	}
 	w.Header().Set(common.HeaderContentType, common.HeaderApplicationJson)
+	addMoracideTagsAsResponseHeaders(w)
 	w.WriteHeader(status)
 	w.Write(rbytes)
 }
@@ -107,6 +111,7 @@ func WriteOkResponseByTemplate(w http.ResponseWriter, dataStr string, state int,
 		rbytes = []byte(fmt.Sprintf(OkResponseTemplate, s, stateText, updatedTime))
 	}
 	w.Header().Set(common.HeaderContentType, common.HeaderApplicationJson)
+	addMoracideTagsAsResponseHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write(rbytes)
 }
@@ -114,6 +119,7 @@ func WriteOkResponseByTemplate(w http.ResponseWriter, dataStr string, state int,
 // this is used to return default tr-181 payload while the cpe is not in the db
 func WriteContentTypeAndResponse(w http.ResponseWriter, rbytes []byte, version string, contentType string) {
 	w.Header().Set(common.HeaderContentType, contentType)
+	addMoracideTagsAsResponseHeaders(w)
 	w.Header().Set(common.HeaderEtag, version)
 	w.WriteHeader(http.StatusOK)
 	w.Write(rbytes)
@@ -152,12 +158,42 @@ func WriteResponseBytes(w http.ResponseWriter, rbytes []byte, statusCode int, va
 	if len(vargs) > 0 {
 		w.Header().Set(common.HeaderContentType, vargs[0])
 	}
+	addMoracideTagsAsResponseHeaders(w)
 	w.WriteHeader(statusCode)
 	w.Write(rbytes)
 }
 
 func WriteFactoryResetResponse(w http.ResponseWriter) {
 	w.Header().Set(common.HeaderContentType, common.MultipartContentType)
+	addMoracideTagsAsResponseHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte{})
+}
+
+func addMoracideTagsAsResponseHeaders(w http.ResponseWriter) {
+	xw, ok := w.(*XResponseWriter)
+	if !ok {
+		return
+	}
+
+	reqMoracideTagPrefix := strings.ToLower("req_"+tracing.GetMoracideTagPrefix())
+	respMoracideTagPrefix := strings.ToLower("resp_"+tracing.GetMoracideTagPrefix())
+	fields := xw.Audit()
+	moracideTags := make(map[string]string)
+	for key, val := range fields {
+		if strings.HasPrefix(strings.ToLower(key), reqMoracideTagPrefix) {
+			log.Debugf("Adding moracide tag from req %s = %s to response", key, val)
+			moracideTags[key[4:]] = val.(string)
+		}
+		if strings.HasPrefix(strings.ToLower(key), respMoracideTagPrefix) {
+			log.Debugf("Adding moracide tag from resp %s = %s to response", key, val)
+			realKey := key[5:]
+			if existingVal, ok := moracideTags[realKey]; !ok || (ok && existingVal != "true") {
+				moracideTags[realKey] = val.(string)
+			}
+		}
+	}
+	for key, val := range moracideTags {
+		w.Header().Set(key, val)
+	}
 }

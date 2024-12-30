@@ -19,6 +19,7 @@ package http
 
 import (
 	"github.com/gorilla/mux"
+	"github.com/rdkcentral/webconfig/tracing"
 )
 
 func (s *WebconfigServer) AddBaseRoutes(testOnly bool, router *mux.Router) {
@@ -95,9 +96,9 @@ func (s *WebconfigServer) GetRouter(testOnly bool) *mux.Router {
 		sub2.Use(s.TestingMiddleware)
 	} else {
 		if s.ServerApiTokenAuthEnabled() {
-			sub2.Use(s.ApiMiddleware)
+			sub2.Use(tracing.SpanMiddleware, s.ApiMiddleware)
 		} else {
-			sub2.Use(s.NoAuthMiddleware)
+			sub2.Use(tracing.SpanMiddleware, s.NoAuthMiddleware)
 		}
 	}
 	sub2.HandleFunc("", s.PokeHandler).Methods("POST")

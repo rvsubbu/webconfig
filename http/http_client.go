@@ -36,9 +36,9 @@ import (
 	"github.com/go-akka/configuration"
 	"github.com/google/uuid"
 	"github.com/rdkcentral/webconfig/common"
+	"github.com/rdkcentral/webconfig/tracing"
 	"github.com/rdkcentral/webconfig/util"
 	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/otel/propagation"
 )
 
 const (
@@ -112,6 +112,13 @@ func NewHttpClient(conf *configuration.Config, serviceName string, tlsConfig *tl
 func (c *HttpClient) Do(ctx context.Context, method string, url string, header http.Header, bbytes []byte, auditFields log.Fields, loggerName string, retry int) ([]byte, http.Header, bool, error) {
 	fields := common.FilterLogFields(auditFields)
 
+	var respMoracideTagsFound bool
+	defer func(found *bool) {
+		if !*found {
+			log.Debugf("http_client: no moracide tags in response")
+		}
+	}(&respMoracideTagsFound)
+
 	// verify a response is received
 	var req *http.Request
 	var err error
@@ -152,6 +159,7 @@ func (c *HttpClient) Do(ctx context.Context, method string, url string, header h
 		req.Header.Set(common.HeaderUserAgent, c.userAgent)
 	}
 
+	c.addMoracideTags(header, auditFields)
 	logHeader := header.Clone()
 	auth := logHeader.Get("Authorization")
 	if len(auth) > 0 {
@@ -207,9 +215,6 @@ func (c *HttpClient) Do(ctx context.Context, method string, url string, header h
 
 	startTime := time.Now()
 
-	// the core http call
-	propagator := propagation.TraceContext{}
-	propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 	res, err := c.Client.Do(req)
 	// err should be *url.Error
 
@@ -219,6 +224,31 @@ func (c *HttpClient) Do(ctx context.Context, method string, url string, header h
 
 	delete(fields, bodyKey)
 
+	// We want to capture any errs returned by server
+	// i.e. timeout, 503 etc. wouldn't have a valid resp, but possible that
+	// the err returned by http.Do actually includes an err returned by the backend
+	// In which case, resp would be non-nil
+	moracideTagPrefix := strings.ToLower(tracing.GetMoracideTagPrefix())
+	if res != nil {
+		for headerKey, headerVals := range res.Header {
+			if strings.HasPrefix(strings.ToLower(headerKey), moracideTagPrefix) {
+				respMoracideTagsFound = true
+				log.Debugf("http_client: moracide tag %s = %s found in response", headerKey, headerVals[0])
+				if len(headerVals) > 1 {
+					log.Debugf("Tracing: moracide tag key = %s, has multiple values = %+v", headerKey, headerVals)
+				}
+				val := "false"
+				for _, v := range headerVals {
+					if v == "true" {
+						val = v
+						break
+					}
+				}
+				auditFields["resp_"+headerKey] = headerVals[0]
+				log.Debugf("Tracing: found moracide tag in response key = %s, val = %s", headerKey, val)
+			}
+		}
+	}
 	var endMessage string
 	if retry > 0 {
 		endMessage = fmt.Sprintf("%v retry=%v ends", loggerName, retry)
@@ -393,4 +423,26 @@ func (c *HttpClient) StatusHandler(status int) StatusHandlerFunc {
 		return fn
 	}
 	return nil
+}
+
+// addMoracideTags - if ctx has a moracide tag as a header, add it to the headers
+// Also add traceparent, tracestate headers
+func (c *HttpClient) addMoracideTags(header http.Header, fields log.Fields) {
+	moracideTagPrefix := strings.ToLower("req_"+tracing.GetMoracideTagPrefix())
+	for key, val := range fields {
+		if key == "out_traceparent" {
+			header.Set("traceparent", val.(string))
+		}
+		if key == "out_tracestate" {
+			header.Set("tracestate", val.(string))
+		}
+		if len(key) < 5 {
+			// Should be of the form "req_x-cl-experiment<whatever>"
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(key), moracideTagPrefix) {
+			log.Debugf("Adding moracide tag %s = %s to outgoing req", key, val)
+			header.Set(key[4:], val.(string))
+		}
+	}
 }
