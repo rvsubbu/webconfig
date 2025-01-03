@@ -81,7 +81,7 @@ func initAppData(conf *configuration.Config) {
 	if xpcTracer.rgn == "" {
 		xpcTracer.rgn = os.Getenv("site_region_name")
 	}
-	log.Debugf("site_color = %f, env = %s, rgn = %s", siteColor, xpcTracer.appEnv, xpcTracer.rgn)
+	log.Debugf("site_color = %s, env = %s, rgn = %s", siteColor, xpcTracer.appEnv, xpcTracer.rgn)
 }
 
 func GetServiceName() string {
