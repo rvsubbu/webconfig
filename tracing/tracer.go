@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/go-akka/configuration"
+	log "github.com/sirupsen/logrus"
 
 	oteltrace "go.opentelemetry.io/otel/trace"
 	otelpropagation "go.opentelemetry.io/otel/propagation"
@@ -70,13 +71,17 @@ func initAppData(conf *configuration.Config) {
 
 	// Env vars
 	xpcTracer.appEnv = "dev"
-	siteColor := os.Getenv("SITE_COLOR")
+	siteColor := os.Getenv("site_color")
 	if strings.EqualFold(siteColor, "yellow") {
 		xpcTracer.appEnv = "staging"
 	} else if strings.EqualFold(siteColor, "green") {
 		xpcTracer.appEnv = "prod"
 	}
-	xpcTracer.rgn = os.Getenv("SITE_REGION")
+	xpcTracer.rgn = os.Getenv("site_region")
+	if xpcTracer.rgn == "" {
+		xpcTracer.rgn = os.Getenv("site_region_name")
+	}
+	log.Debugf("site_color = %s, env = %s, rgn = %s", siteColor, xpcTracer.appEnv, xpcTracer.rgn)
 }
 
 func GetServiceName() string {
