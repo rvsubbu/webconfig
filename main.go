@@ -81,6 +81,7 @@ func main() {
 		TimestampFormat: common.LoggingTimeFormat,
 		FieldMap: log.FieldMap{
 			log.FieldKeyTime: "timestamp",
+			log.FieldKeyMsg:  "message",
 		},
 	})
 
