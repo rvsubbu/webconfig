@@ -1,15 +1,31 @@
+/**
+* Copyright 2021 Comcast Cable Communications Management, LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+* SPDX-License-Identifier: Apache-2.0
+ */
 package tracing
 
 import (
 	"net/http"
 	"strings"
 
+	"github.com/rdkcentral/webconfig/common"
 	log "github.com/sirupsen/logrus"
 
-	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/attribute"
-
-	"github.com/rdkcentral/webconfig/common"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // SpanMiddleware is a middleware that creates a new span for each incoming request.
@@ -34,7 +50,7 @@ type XpcTrace struct {
 	// e.g. X-Cl-Experiment-1, X-Cl-Experiment-xapproxy, X-Cl-Experiement-webconfig-25.1.1.1...
 	// For every key found in either req or resp, an explicit value of true/false will be set as an otel attribute
 	// or an otel span attribute
-	ReqMoracideTags  map[string]string  // These are request headers prefixed with MoracideTagPrefix
+	ReqMoracideTags map[string]string // These are request headers prefixed with MoracideTagPrefix
 	// The response moracide tags are stored in xw.audit
 
 	// traceparent, tracestate can be set as req headers, may be extracted from otel spans
@@ -45,27 +61,27 @@ type XpcTrace struct {
 	// Otherwise, nothing will be passed to the child http calls, creating islands
 	// If any source is found, then it will be propagated to all child http calls
 	// TODO; also add this to Kafka headers, SNS message attributes
-	otelTraceparent  string
-	otelTracestate   string
-	ReqTraceparent   string
-	ReqTracestate    string
-	OutTraceparent   string
-	OutTracestate    string
+	otelTraceparent string
+	otelTracestate  string
+	ReqTraceparent  string
+	ReqTracestate   string
+	OutTraceparent  string
+	OutTracestate   string
 
 	// At the end of API flow, add the status code to OtelSpan; add the Moracide tags to the spans
-	otelSpan         oteltrace.Span
+	otelSpan oteltrace.Span
 
 	// These are not useful as of now, just set them for the sake of completion and future
-	AuditID          string
-	MoneyTrace       string
-	ReqUserAgent     string
-	OutUserAgent     string
+	AuditID      string
+	MoneyTrace   string
+	ReqUserAgent string
+	OutUserAgent string
 
-	TraceID          string // use the value in outTraceparent, otherwise MoneyTrace
+	TraceID string // use the value in outTraceparent, otherwise MoneyTrace
 }
 
 // NewXpcTrace extracts traceparent, tracestate, moracideTags from otel spans or reqs
-func NewXpcTrace(r *http.Request) * XpcTrace {
+func NewXpcTrace(r *http.Request) *XpcTrace {
 	var xpcTrace XpcTrace
 	xpcTrace.ReqMoracideTags = make(map[string]string)
 
@@ -109,8 +125,8 @@ func SetSpanMoracideTags(fields log.Fields) {
 		xpcTrace = tmp.(*XpcTrace)
 	}
 	moracideTags := make(map[string]string)
-	reqMoracideTagPrefix := strings.ToLower("req_"+xpcTracer.MoracideTagPrefix)
-	respMoracideTagPrefix := strings.ToLower("resp_"+xpcTracer.MoracideTagPrefix)
+	reqMoracideTagPrefix := strings.ToLower("req_" + xpcTracer.MoracideTagPrefix)
+	respMoracideTagPrefix := strings.ToLower("resp_" + xpcTracer.MoracideTagPrefix)
 
 	for key, val := range fields {
 		if strings.HasPrefix(strings.ToLower(key), reqMoracideTagPrefix) {
@@ -149,7 +165,7 @@ func extractParamsFromReq(r *http.Request, xpcTrace *XpcTrace) {
 	// We will not move this to tracing module
 	// xpcTrace.AuditID = r.Header.Get(AuditIDHeader)
 	// if xpcTrace.AuditID == "" {
-		// xpcTrace.AuditID = util.GetAuditId()
+	// xpcTrace.AuditID = util.GetAuditId()
 	// }
 
 	// Moneytrace is Comcast's original solution for tracing

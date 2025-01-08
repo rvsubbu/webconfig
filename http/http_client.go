@@ -154,12 +154,12 @@ func (c *HttpClient) Do(ctx context.Context, method string, url string, header h
 		header.Set("X-Webpa-Transaction-Id", transactionId)
 	}
 
+	c.addMoracideTags(header, auditFields)
 	req.Header = header.Clone()
 	if len(c.userAgent) > 0 {
 		req.Header.Set(common.HeaderUserAgent, c.userAgent)
 	}
 
-	c.addMoracideTags(header, auditFields)
 	logHeader := header.Clone()
 	auth := logHeader.Get("Authorization")
 	if len(auth) > 0 {
@@ -428,7 +428,7 @@ func (c *HttpClient) StatusHandler(status int) StatusHandlerFunc {
 // addMoracideTags - if ctx has a moracide tag as a header, add it to the headers
 // Also add traceparent, tracestate headers
 func (c *HttpClient) addMoracideTags(header http.Header, fields log.Fields) {
-	moracideTagPrefix := strings.ToLower("req_"+tracing.GetMoracideTagPrefix())
+	moracideTagPrefix := strings.ToLower("req_" + tracing.GetMoracideTagPrefix())
 	for key, val := range fields {
 		if key == "out_traceparent" {
 			header.Set("traceparent", val.(string))

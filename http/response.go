@@ -22,10 +22,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/rdkcentral/webconfig/common"
 	"github.com/rdkcentral/webconfig/tracing"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -176,8 +176,8 @@ func addMoracideTagsAsResponseHeaders(w http.ResponseWriter) {
 		return
 	}
 
-	reqMoracideTagPrefix := strings.ToLower("req_"+tracing.GetMoracideTagPrefix())
-	respMoracideTagPrefix := strings.ToLower("resp_"+tracing.GetMoracideTagPrefix())
+	reqMoracideTagPrefix := strings.ToLower("req_" + tracing.GetMoracideTagPrefix())
+	respMoracideTagPrefix := strings.ToLower("resp_" + tracing.GetMoracideTagPrefix())
 	fields := xw.Audit()
 	moracideTags := make(map[string]string)
 	for key, val := range fields {
