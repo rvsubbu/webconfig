@@ -110,7 +110,7 @@ func NewHttpClient(conf *configuration.Config, serviceName string, tlsConfig *tl
 }
 
 func (c *HttpClient) Do(ctx context.Context, method string, url string, header http.Header, bbytes []byte, auditFields log.Fields, loggerName string, retry int) ([]byte, http.Header, bool, error) {
-	fields := common.FilterLogFields(auditFields)
+	fields := common.FilterLogFields(auditFields, "status")
 
 	var respMoracideTagsFound bool
 	defer func(found *bool) {
