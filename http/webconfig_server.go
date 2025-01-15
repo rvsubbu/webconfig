@@ -43,6 +43,7 @@ import (
 	"github.com/rdkcentral/webconfig/tracing"
 	"github.com/rdkcentral/webconfig/util"
 	log "github.com/sirupsen/logrus"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // TODO enum, probably no need
@@ -330,7 +331,7 @@ func NewWebconfigServer(sc *common.ServerConfig, testOnly bool) *WebconfigServer
 }
 
 func (s *WebconfigServer) Stop() {
-	tracing.StopXpcTracer()
+	s.StopXpcTracer()
 }
 
 func (s *WebconfigServer) TestingMiddleware(next http.Handler) http.Handler {
@@ -730,7 +731,7 @@ func (s *WebconfigServer) logRequestStarts(w http.ResponseWriter, r *http.Reques
 		token = elements[1]
 	}
 
-	var xmTraceId, traceId string
+	var xmTraceId string
 
 	// extract moneytrace from the header
 	tracePart := strings.Split(r.Header.Get("X-Moneytrace"), ";")[0]
@@ -740,12 +741,6 @@ func (s *WebconfigServer) logRequestStarts(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// extract traceparent from the header
-	traceparent := r.Header.Get(common.HeaderTraceparent)
-	if len(traceparent) == 55 {
-		traceId = traceparent[3:35]
-	}
-
 	// extract auditid from the header
 	auditId := r.Header.Get("X-Auditid")
 	if len(auditId) == 0 {
@@ -753,27 +748,29 @@ func (s *WebconfigServer) logRequestStarts(w http.ResponseWriter, r *http.Reques
 	}
 
 	// traceparent handling for E2E tracing
-	xpcTrace := tracing.NewXpcTrace(r)
+	xpcTrace := tracing.NewXpcTrace(r, s.XpcTracer)
+	traceId := xpcTrace.TraceID
+	if len(traceId) == 0 {
+		traceId = xmTraceId
+	}
 
 	headerMap := util.HeaderToMap(header)
 	fields := log.Fields{
-		"path":            r.URL.String(),
-		"method":          r.Method,
-		"audit_id":        auditId,
-		"remote_ip":       remoteIp,
-		"host_name":       host,
-		"header":          headerMap,
-		"logger":          "request",
-		"trace_id":        traceId,
-		"app_name":        s.AppName(),
-		"traceparent":     xpcTrace.ReqTraceparent,
-		"tracestate":      xpcTrace.ReqTracestate,
-		"out_traceparent": xpcTrace.OutTraceparent,
-		"out_tracestate":  xpcTrace.OutTracestate,
-		"xpc_trace":       xpcTrace,
-	}
-	for key, val := range xpcTrace.ReqMoracideTags {
-		fields["req_"+key] = val
+		"path":              r.URL.String(),
+		"method":            r.Method,
+		"audit_id":          auditId,
+		"remote_ip":         remoteIp,
+		"host_name":         host,
+		"header":            headerMap,
+		"logger":            "request",
+		"trace_id":          traceId,
+		"app_name":          s.AppName(),
+		"traceparent":       xpcTrace.ReqTraceparent,
+		"tracestate":        xpcTrace.ReqTracestate,
+		"out_traceparent":   xpcTrace.OutTraceparent,
+		"out_tracestate":    xpcTrace.OutTracestate,
+		"req_moracide_tags": xpcTrace.ReqMoracideTags,
+		"xpc_trace":         xpcTrace,
 	}
 
 	userAgent := r.UserAgent()
@@ -902,8 +899,8 @@ func (s *WebconfigServer) logRequestEnds(xw *XResponseWriter, r *http.Request) {
 	fields["duration"] = duration
 	fields["logger"] = "request"
 
-	tracing.SetSpanStatusCode(fields)
-	tracing.SetSpanMoracideTags(fields)
+	tracing.SetSpanStatusCode(s.XpcTracer, fields)
+	tracing.SetSpanMoracideTags(s.XpcTracer, fields)
 
 	var userAgent string
 	if itf, ok := fields["user_agent"]; ok {
@@ -1117,4 +1114,22 @@ func (s *WebconfigServer) HandleKafkaProducerResults() {
 			log.WithFields(fields).Error(pErr.Err)
 		}
 	}
+}
+
+func (s *WebconfigServer) StopXpcTracer() {
+	sdkTraceProvider, ok := s.XpcTracer.OtelTracerProvider().(*sdktrace.TracerProvider)
+	if ok && sdkTraceProvider != nil {
+		sdkTraceProvider.Shutdown(context.TODO())
+	}
+}
+
+func (s *WebconfigServer) SpanMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.XpcTracer.OtelEnabled {
+			ctx, otelSpan := tracing.NewOtelSpan(r, s.XpcTracer)
+			r = r.WithContext(ctx)
+			defer tracing.EndOtelSpan(s.XpcTracer, otelSpan)
+		}
+		next.ServeHTTP(w, r)
+	})
 }

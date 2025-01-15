@@ -62,6 +62,7 @@ type HttpClient struct {
 	retryInMsecs         int
 	statusHandlerFuncMap map[int]StatusHandlerFunc
 	userAgent            string
+	moracideTagPrefix    string
 }
 
 func NewHttpClient(conf *configuration.Config, serviceName string, tlsConfig *tls.Config) *HttpClient {
@@ -83,6 +84,8 @@ func NewHttpClient(conf *configuration.Config, serviceName string, tlsConfig *tl
 	confKey = fmt.Sprintf("webconfig.%v.retry_in_msecs", serviceName)
 	retryInMsecs := int(conf.GetInt32(confKey, defaultRetriesInMsecs))
 	userAgent := conf.GetString("webconfig.http_client.user_agent")
+
+	moracideTagPrefix := strings.ToLower(conf.GetString("webconfig.tracing.moracide_tag_prefix", tracing.DefaultMoracideTagPrefix))
 
 	var transport http.RoundTripper = &http.Transport{
 		DialContext: (&net.Dialer{
@@ -106,6 +109,7 @@ func NewHttpClient(conf *configuration.Config, serviceName string, tlsConfig *tl
 		retryInMsecs:         retryInMsecs,
 		statusHandlerFuncMap: map[int]StatusHandlerFunc{},
 		userAgent:            userAgent,
+		moracideTagPrefix:    moracideTagPrefix,
 	}
 }
 
@@ -228,26 +232,8 @@ func (c *HttpClient) Do(ctx context.Context, method string, url string, header h
 	// i.e. timeout, 503 etc. wouldn't have a valid resp, but possible that
 	// the err returned by http.Do actually includes an err returned by the backend
 	// In which case, resp would be non-nil
-	moracideTagPrefix := strings.ToLower(tracing.GetMoracideTagPrefix())
 	if res != nil {
-		for headerKey, headerVals := range res.Header {
-			if strings.HasPrefix(strings.ToLower(headerKey), moracideTagPrefix) {
-				respMoracideTagsFound = true
-				log.Debugf("http_client: moracide tag %s = %s found in response", headerKey, headerVals[0])
-				if len(headerVals) > 1 {
-					log.Debugf("Tracing: moracide tag key = %s, has multiple values = %+v", headerKey, headerVals)
-				}
-				val := "false"
-				for _, v := range headerVals {
-					if v == "true" {
-						val = v
-						break
-					}
-				}
-				auditFields["resp_"+headerKey] = headerVals[0]
-				log.Debugf("Tracing: found moracide tag in response key = %s, val = %s", headerKey, val)
-			}
-		}
+		respMoracideTagsFound = c.addMoracideTagsFromResponse(res.Header, auditFields)
 	}
 	var endMessage string
 	if retry > 0 {
@@ -428,21 +414,45 @@ func (c *HttpClient) StatusHandler(status int) StatusHandlerFunc {
 // addMoracideTags - if ctx has a moracide tag as a header, add it to the headers
 // Also add traceparent, tracestate headers
 func (c *HttpClient) addMoracideTags(header http.Header, fields log.Fields) {
-	moracideTagPrefix := strings.ToLower("req_" + tracing.GetMoracideTagPrefix())
-	for key, val := range fields {
-		if key == "out_traceparent" {
-			header.Set("traceparent", val.(string))
-		}
-		if key == "out_tracestate" {
-			header.Set("tracestate", val.(string))
-		}
-		if len(key) < 5 {
-			// Should be of the form "req_x-cl-experiment<whatever>"
-			continue
-		}
-		if strings.HasPrefix(strings.ToLower(key), moracideTagPrefix) {
-			log.Debugf("Adding moracide tag %s = %s to outgoing req", key, val)
-			header.Set(key[4:], val.(string))
+	if itf, ok := fields["out_traceparent"]; ok {
+		if ss, ok := itf.(string); ok {
+			if len(ss) > 0 {
+				header.Set(common.HeaderTraceparent, ss)
+			}
 		}
 	}
+	if itf, ok := fields["out_tracestate"]; ok {
+		if ss, ok := itf.(string); ok {
+			if len(ss) > 0 {
+				header.Set(common.HeaderTracestate, ss)
+			}
+		}
+	}
+
+	itf, ok := fields["req_moracide_tags"]
+	if !ok {
+		return
+	}
+	moracideTagMap := itf.(map[string]string)
+
+	for key, val := range moracideTagMap {
+		log.WithFields(fields).Debugf("Adding moracide tag %s = %s to outgoing req", key, val)
+		header.Set(key, val)
+	}
+}
+
+func (c *HttpClient) addMoracideTagsFromResponse(header http.Header, fields log.Fields) bool {
+	var respMoracideTagsFound bool
+	m := make(map[string]string)
+	for k := range header {
+		if strings.HasPrefix(strings.ToLower(k), c.moracideTagPrefix) {
+			respMoracideTagsFound = true
+			val := header.Get(k)
+			m[k] = val
+		}
+	}
+	if len(m) > 0 {
+		fields["resp_moracide_tags"] = m
+	}
+	return respMoracideTagsFound
 }
