@@ -212,7 +212,7 @@ func (c *WebpaConnector) Patch(ctx context.Context, rHeader http.Header, cpeMac 
 	header.Set("X-Webpa-Transaction-Id", transactionId)
 
 	method := "PATCH"
-	_, _, cont, err := c.syncClient.Do(ctx, method, url, header, bbytes, fields, webpaServiceName, 0)
+	_, _, cont, err := c.syncClient.Do(method, url, header, bbytes, fields, webpaServiceName, 0)
 	if err != nil {
 		var rherr common.RemoteHttpError
 		if errors.As(err, &rherr) {
@@ -230,7 +230,7 @@ func (c *WebpaConnector) Patch(ctx context.Context, rHeader http.Header, cpeMac 
 			}
 		}
 		if cont {
-			_, _, err := c.syncClient.DoWithRetries(ctx, "PATCH", url, header, bbytes, fields, webpaServiceName)
+			_, _, err := c.syncClient.DoWithRetries("PATCH", url, header, bbytes, fields, webpaServiceName)
 			if err != nil {
 				return transactionId, common.NewError(err)
 			}
@@ -250,7 +250,7 @@ func (c *WebpaConnector) AsyncDoWithRetries(ctx context.Context, method string, 
 		if i > 0 {
 			time.Sleep(time.Duration(c.retryInMsecs) * time.Millisecond)
 		}
-		_, _, cont, _ := c.asyncClient.Do(ctx, method, url, header, cbytes, fields, loggerName, i)
+		_, _, cont, _ := c.asyncClient.Do(method, url, header, cbytes, fields, loggerName, i)
 		if !cont {
 			msg := fmt.Sprintf("finished success after 1 retry")
 			if i > 1 {
@@ -278,7 +278,7 @@ func (c *WebpaConnector) SyncDoWithRetries(ctx context.Context, method string, u
 		if i > 0 {
 			time.Sleep(time.Duration(c.retryInMsecs) * time.Millisecond)
 		}
-		rbytes, _, cont, err = c.syncClient.Do(ctx, method, url, header, cbytes, fields, loggerName, i)
+		rbytes, _, cont, err = c.syncClient.Do(method, url, header, cbytes, fields, loggerName, i)
 		if !cont {
 			// in the case of 524/in-progress, we continue
 			var rherr common.RemoteHttpError

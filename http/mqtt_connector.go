@@ -105,7 +105,7 @@ func (c *MqttConnector) PostMqtt(ctx context.Context, cpeMac string, bbytes []by
 	header.Set(common.HeaderTraceparent, outTraceparent)
 	header.Set(common.HeaderTracestate, outTracestate)
 
-	rbytes, _, err := c.DoWithRetries(ctx, "POST", url, header, bbytes, fields, c.ServiceName())
+	rbytes, _, err := c.DoWithRetries("POST", url, header, bbytes, fields, c.ServiceName())
 	if err != nil {
 		return rbytes, common.NewError(err)
 	}

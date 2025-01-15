@@ -87,7 +87,7 @@ func (c *UpstreamConnector) PostUpstream(ctx context.Context, mac string, header
 		}
 	}
 
-	rbytes, header, err := c.DoWithRetries(ctx, "POST", url, header, bbytes, fields, c.ServiceName())
+	rbytes, header, err := c.DoWithRetries("POST", url, header, bbytes, fields, c.ServiceName())
 	if err != nil {
 		return rbytes, header, owcommon.NewError(err)
 	}
@@ -111,7 +111,7 @@ func (c *UpstreamConnector) GetUpstreamProfiles(ctx context.Context, mac, queryP
 		}
 	}
 
-	rbytes, header, err := c.DoWithRetries(ctx, "GET", url, header, nil, fields, c.ServiceName())
+	rbytes, header, err := c.DoWithRetries("GET", url, header, nil, fields, c.ServiceName())
 	if err != nil {
 		return rbytes, header, owcommon.NewError(err)
 	}
