@@ -287,7 +287,7 @@ func BuildWebconfigResponse(s *WebconfigServer, ctx context.Context, rHeader htt
 		upstreamHeader.Set(common.HeaderUpstreamOldSchemaVersion, oldRootDocument.SchemaVersion)
 	}
 
-	upstreamRespBytes, upstreamRespHeader, err := s.PostUpstream(ctx, mac, upstreamHeader, respBytes, fields)
+	upstreamRespBytes, upstreamRespHeader, err := s.PostUpstream(mac, upstreamHeader, respBytes, fields)
 	if err != nil {
 		var rherr common.RemoteHttpError
 		if errors.As(err, &rherr) {
@@ -410,7 +410,7 @@ func BuildFactoryResetResponse(s *WebconfigServer, ctx context.Context, rHeader 
 	}
 
 	// call /upstream to handle factory reset
-	upstreamRespBytes, upstreamRespHeader, err := s.PostUpstream(ctx, mac, upstreamHeader, oldDocBytes, fields)
+	upstreamRespBytes, upstreamRespHeader, err := s.PostUpstream(mac, upstreamHeader, oldDocBytes, fields)
 	if err != nil {
 		var rherr common.RemoteHttpError
 		if errors.As(err, &rherr) {

@@ -701,9 +701,9 @@ func (s *WebconfigServer) ValidatePartner(parsedPartner string) error {
 	return fmt.Errorf("invalid partner")
 }
 
-func (c *WebconfigServer) Poke(ctx context.Context, rHeader http.Header, cpeMac string, token string, pokeStr string, fields log.Fields) (string, error) {
+func (c *WebconfigServer) Poke(rHeader http.Header, cpeMac string, token string, pokeStr string, fields log.Fields) (string, error) {
 	body := fmt.Sprintf(common.PokeBodyTemplate, pokeStr)
-	transactionId, err := c.Patch(ctx, rHeader, cpeMac, token, []byte(body), fields)
+	transactionId, err := c.Patch(rHeader, cpeMac, token, []byte(body), fields)
 	if err != nil {
 		return "", common.NewError(err)
 	}

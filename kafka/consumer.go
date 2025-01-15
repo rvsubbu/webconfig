@@ -162,7 +162,7 @@ func (c *Consumer) handleGetMessage(inbytes []byte, fields log.Fields) (*common.
 	}
 
 	mqttBytes := common.BuildPayloadAsHttp(status, respHeader, respBytes)
-	_, err = c.PostMqtt(ctx, cpeMac, mqttBytes, fields)
+	_, err = c.PostMqtt(cpeMac, mqttBytes, fields)
 	if err != nil {
 		return &m, common.NewError(err)
 	}
