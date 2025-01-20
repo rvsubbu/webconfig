@@ -34,6 +34,8 @@ const (
 	DefaultMoracideTagPrefix = "X-Cl-Experiment"
 )
 
+type SpanSetterFunc func(log.Fields, string)
+
 // XpcTracer is a wrapper around tracer setup
 type XpcTracer struct {
 	OtelEnabled       bool
@@ -54,13 +56,22 @@ type XpcTracer struct {
 	otelTracerProvider oteltrace.TracerProvider
 	otelPropagator     otelpropagation.TextMapPropagator
 	otelTracer         oteltrace.Tracer
+
+	SetSpan SpanSetterFunc
 }
 
 func NewXpcTracer(conf *configuration.Config) *XpcTracer {
 	xpcTracer := new(XpcTracer)
-	initAppData(conf, xpcTracer)
-	otelInit(conf, xpcTracer)
+	initAppData(xpcTracer, conf)
+	otelInit(xpcTracer, conf)
 	xpcTracer.moracideTagPrefix = conf.GetString("webconfig.tracing.moracide_tag_prefix", DefaultMoracideTagPrefix)
+
+	if xpcTracer.OtelEnabled {
+		xpcTracer.SetSpan = OtelSetSpan
+	} else {
+		xpcTracer.SetSpan = NoopSetSpan
+	}
+
 	return xpcTracer
 }
 
@@ -84,7 +95,19 @@ func (t *XpcTracer) AppName() string {
 	return t.appName
 }
 
-func initAppData(conf *configuration.Config, xpcTracer *XpcTracer) {
+func (t *XpcTracer) AppVersion() string {
+	return t.appVersion
+}
+
+func (t *XpcTracer) AppEnv() string {
+	return t.appEnv
+}
+
+func (t *XpcTracer) Region() string {
+	return t.region
+}
+
+func initAppData(xpcTracer *XpcTracer, conf *configuration.Config) {
 	codeGitCommit := strings.Split(conf.GetString("webconfig.code_git_commit"), "-")
 	xpcTracer.appName = codeGitCommit[0]
 	if len(codeGitCommit) > 1 {
@@ -107,4 +130,12 @@ func initAppData(conf *configuration.Config, xpcTracer *XpcTracer) {
 		xpcTracer.region = os.Getenv("site_region_name")
 	}
 	log.Debugf("site_color = %s, env = %s, region = %s", siteColor, xpcTracer.appEnv, xpcTracer.region)
+}
+
+func OtelSetSpan(fields log.Fields, tag string) {
+	SetSpanStatusCode(fields)
+	SetSpanMoracideTags(fields, tag)
+}
+
+func NoopSetSpan(fields log.Fields, tag string) {
 }
