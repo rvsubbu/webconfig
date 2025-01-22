@@ -28,19 +28,6 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
-// SpanMiddleware is a middleware that creates a new span for each incoming request.
-func SpanMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// For Otel, create the span explicitly
-		if xpcTracer.OtelEnabled {
-			ctx, otelSpan := otelNewSpan(r)
-			r = r.WithContext(ctx)
-			defer otelEndSpan(otelSpan)
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 // XpcTrace is a carrier/baggage struct to extract data from spans, request headers for usage later
 // Store the trace in ctx for easy retrieval.
 // Ideal place to store it is ofc, xw
@@ -81,11 +68,11 @@ type XpcTrace struct {
 }
 
 // NewXpcTrace extracts traceparent, tracestate, moracideTags from otel spans or reqs
-func NewXpcTrace(r *http.Request) *XpcTrace {
+func NewXpcTrace(xpcTracer *XpcTracer, r *http.Request) *XpcTrace {
 	var xpcTrace XpcTrace
 	xpcTrace.ReqMoracideTags = make(map[string]string)
 
-	extractParamsFromReq(r, &xpcTrace)
+	extractParamsFromReq(r, &xpcTrace, xpcTracer.MoracideTagPrefix())
 
 	if xpcTracer.OtelEnabled {
 		otelExtractParamsFromSpan(r.Context(), &xpcTrace)
@@ -102,8 +89,9 @@ func SetSpanStatusCode(fields log.Fields) {
 	if xpcTrace == nil {
 		// Something went wrong, cannot instrument this span
 		log.Error("instrumentation error, no trace info")
+		return
 	}
-	if xpcTracer.OtelEnabled && xpcTrace.otelSpan != nil {
+	if xpcTrace.otelSpan != nil {
 		if tmp, ok := fields["status"]; ok {
 			statusCode := tmp.(int)
 			otelSetStatusCode(xpcTrace.otelSpan, statusCode)
@@ -111,7 +99,7 @@ func SetSpanStatusCode(fields log.Fields) {
 	}
 }
 
-func SetSpanMoracideTags(fields log.Fields) {
+func SetSpanMoracideTags(fields log.Fields, moracideTagPrefix string) {
 	var xpcTrace *XpcTrace
 	if tmp, ok := fields["xpc_trace"]; ok {
 		xpcTrace = tmp.(*XpcTrace)
@@ -119,14 +107,12 @@ func SetSpanMoracideTags(fields log.Fields) {
 	if xpcTrace == nil {
 		// Something went wrong, cannot instrument this span
 		log.Error("instrumentation error, cannot set moracide tags, no trace info")
+		return
 	}
 
-	if tmp, ok := fields["xpc_trace"]; ok {
-		xpcTrace = tmp.(*XpcTrace)
-	}
 	moracideTags := make(map[string]string)
-	reqMoracideTagPrefix := strings.ToLower("req_" + xpcTracer.MoracideTagPrefix)
-	respMoracideTagPrefix := strings.ToLower("resp_" + xpcTracer.MoracideTagPrefix)
+	reqMoracideTagPrefix := strings.ToLower("req_" + moracideTagPrefix)
+	respMoracideTagPrefix := strings.ToLower("resp_" + moracideTagPrefix)
 
 	for key, val := range fields {
 		if strings.HasPrefix(strings.ToLower(key), reqMoracideTagPrefix) {
@@ -144,40 +130,28 @@ func SetSpanMoracideTags(fields log.Fields) {
 	if len(moracideTags) == 0 {
 		// No moracide tags in request or any response
 		// So set at least one span tag, x-cl-expt: false
-		moracideTags[xpcTracer.MoracideTagPrefix] = "false"
+		moracideTags[moracideTagPrefix] = "false"
 	}
-	for key, val := range moracideTags {
-		if xpcTracer.OtelEnabled && xpcTrace.otelSpan != nil {
+	if xpcTrace.otelSpan != nil {
+		for key, val := range moracideTags {
 			xpcTrace.otelSpan.SetAttributes(attribute.String(key, val))
 			log.Debugf("added otel span moracide tag key = %s, value = %s", key, val)
 		}
 	}
 }
 
-func extractParamsFromReq(r *http.Request, xpcTrace *XpcTrace) {
+func extractParamsFromReq(r *http.Request, xpcTrace *XpcTrace, moracideTagPrefix string) {
 	xpcTrace.ReqTraceparent = r.Header.Get(common.HeaderTraceparent)
 	xpcTrace.ReqTracestate = r.Header.Get(common.HeaderTracestate)
 	xpcTrace.OutTraceparent = xpcTrace.ReqTraceparent
 	xpcTrace.OutTracestate = xpcTrace.ReqTracestate
 	log.Debugf("Tracing: input traceparent : %s, tracestate : %s", xpcTrace.ReqTraceparent, xpcTrace.ReqTracestate)
 
-	// AuditID is used internally within xdp subsystem
-	// We will not move this to tracing module
-	// xpcTrace.AuditID = r.Header.Get(AuditIDHeader)
-	// if xpcTrace.AuditID == "" {
-	// xpcTrace.AuditID = util.GetAuditId()
-	// }
-
-	// Moneytrace is Comcast's original solution for tracing
-	// Unused for now, decide whether we need to merge existing moneytrace code here
-	// Being replaced by traceparent/tracestate headers anyway
-	// xpcTrace.MoneyTrace = r.Header.Get(MoneyTraceHeader)
-
 	xpcTrace.ReqUserAgent = r.Header.Get(UserAgentHeader)
 
 	// In future, -H 'X-Cl-Experiment-1', -H 'X-Cl-Experiment-oswebconfig'... OR 'X-Cl-Experiment-xapproxy_25.1.1.1' are all possible
 	// So walk through all headers and collect any header that starts with this prefix
-	moracideTagPrefix := strings.ToLower(xpcTracer.MoracideTagPrefix)
+	moracideTagPrefix = strings.ToLower(moracideTagPrefix)
 	for headerKey, headerVals := range r.Header {
 		if strings.HasPrefix(strings.ToLower(headerKey), moracideTagPrefix) {
 			if len(headerVals) > 1 {
